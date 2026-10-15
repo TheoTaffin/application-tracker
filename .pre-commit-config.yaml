@@ -1,0 +1,55 @@
+# Run `make setup` once after cloning, then hooks run on every commit.
+# Run all checks manually with `make lint`.
+default_install_hook_types: [pre-commit, commit-msg]
+default_stages: [pre-commit]
+
+repos:
+  # Commit messages must follow Conventional Commits (https://www.conventionalcommits.org).
+  - repo: https://github.com/compilerla/conventional-pre-commit
+    rev: v4.4.0
+    hooks:
+      - id: conventional-pre-commit
+        stages: [commit-msg]
+
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-json
+        exclude: ^tsconfig\.json$ # JSONC (comments allowed)
+      - id: check-merge-conflict
+      - id: check-added-large-files
+        args: [--maxkb=1024]
+      - id: detect-private-key
+      - id: no-commit-to-branch
+        args: [--branch, main]
+
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.30.1
+    hooks:
+      - id: gitleaks
+
+  # JS tooling needs the project's own dependencies (eslint plugins, @types, Next's generated
+  # types), so it runs as local hooks. The environment is managed by the repo (`make setup` ->
+  # npm ci), not by pre-commit. Hooks only call package.json scripts, so flags and versions
+  # live in one place, and `npm run` never downloads anything.
+  - repo: local
+    hooks:
+      - id: prettier
+        name: prettier
+        entry: npm run --silent format --
+        language: unsupported
+        types_or: [ts, tsx, javascript, json, css, markdown, yaml]
+      - id: eslint
+        name: eslint
+        entry: npm run --silent lint:fix --
+        language: unsupported
+        types_or: [ts, tsx, javascript]
+      - id: typecheck
+        name: typecheck
+        entry: npm run --silent typecheck
+        language: unsupported
+        files: \.(ts|tsx)$|^(package\.json|tsconfig\.json)$
+        pass_filenames: false
