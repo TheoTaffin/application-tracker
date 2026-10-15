@@ -1,0 +1,13 @@
+.git
+.github
+.next
+.venv
+.claude
+node_modules
+backups
+coverage
+.env
+.env.*
+!.env.example
+*.tsbuildinfo
+next-env.d.ts

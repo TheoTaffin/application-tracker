@@ -1,0 +1,29 @@
+<!doctype html>
+<!-- Synthetic fixture: a career page with a @graph JSON-LD block and a malformed block. -->
+<html lang="fr">
+  <head>
+    <title>Développeur·se Full-Stack 60-80% – Exemple SA</title>
+    <script type="application/ld+json">{ this is not valid json </script>
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@graph": [
+          { "@type": "WebPage", "name": "Carrières" },
+          {
+            "@type": ["JobPosting"],
+            "title": "Développeur·se Full-Stack 60-80%",
+            "hiringOrganization": "Exemple SA",
+            "jobLocation": [{ "@type": "Place", "address": { "addressLocality": "Genève", "addressCountry": "CH" } }],
+            "baseSalary": { "currency": "CHF", "value": 9000, "unitText": "MONTH" },
+            "description": "<p>Nous recherchons une personne pour rejoindre notre équipe à Genève.</p><p>Vous développez des applications web pour nos clients et vous travaillez avec les équipes produit et design. Vous êtes à l'aise avec TypeScript et vous avez le sens du service.</p><p>Nous offrons un cadre de travail flexible et une équipe motivée pour vous accueillir dans les meilleures conditions.</p>"
+          }
+        ]
+      }
+    </script>
+  </head>
+  <body>
+    <article>
+      <h1>Développeur·se Full-Stack 60-80%</h1>
+    </article>
+  </body>
+</html>
