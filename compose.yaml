@@ -1,0 +1,114 @@
+# Production-safe by default: only `web` publishes a port, bound to 127.0.0.1.
+# Debug UIs are opt-in: `make tools` (profile "tools", also loopback-only).
+# Host-side development: `make dev` adds compose.dev.yaml (never loaded implicitly).
+name: application-tracker
+
+x-hardening: &hardening
+  restart: unless-stopped
+  security_opt: ["no-new-privileges:true"]
+
+x-app-env: &app-env
+  DATABASE_URL: postgres://${POSTGRES_USER:?}:${POSTGRES_PASSWORD:?}@db:5432/${POSTGRES_DB:?}
+  S3_ENDPOINT: http://storage:9000
+  S3_REGION: us-east-1
+  S3_BUCKET: ${S3_BUCKET:?}
+  S3_ACCESS_KEY_ID: ${S3_ACCESS_KEY_ID:?}
+  S3_SECRET_ACCESS_KEY: ${S3_SECRET_ACCESS_KEY:?}
+  S3_FORCE_PATH_STYLE: "true"
+
+services:
+  db:
+    <<: *hardening
+    image: postgres:18.6-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:?}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?}
+      POSTGRES_DB: ${POSTGRES_DB:?}
+    volumes:
+      - pgdata:/var/lib/postgresql
+    networks: [backend]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  storage:
+    <<: *hardening
+    image: rustfs/rustfs:1.0.1
+    environment:
+      RUSTFS_VOLUMES: /data
+      RUSTFS_ADDRESS: 0.0.0.0:9000
+      RUSTFS_CONSOLE_ENABLE: "true"
+      RUSTFS_CONSOLE_ADDRESS: 0.0.0.0:9001
+      RUSTFS_ACCESS_KEY: ${S3_ACCESS_KEY_ID:?}
+      RUSTFS_SECRET_KEY: ${S3_SECRET_ACCESS_KEY:?}
+    volumes:
+      - storagedata:/data
+    networks: [backend]
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:9000/health"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+
+  # Applies migrations and creates the bucket, then exits.
+  init:
+    build:
+      context: .
+      target: init
+    restart: "no"
+    security_opt: ["no-new-privileges:true"]
+    environment: *app-env
+    networks: [backend]
+    depends_on:
+      db: { condition: service_healthy }
+      storage: { condition: service_healthy }
+
+  web:
+    <<: *hardening
+    build:
+      context: .
+      target: runner
+    environment: *app-env
+    ports:
+      - "127.0.0.1:${WEB_PORT:-3000}:3000"
+    # backend: database + storage; egress: fetching job postings from the internet.
+    networks: [backend, egress]
+    depends_on:
+      init: { condition: service_completed_successfully }
+
+  # --- Debug tools: `make tools` -------------------------------------------------
+  adminer:
+    <<: *hardening
+    image: adminer:5.5.1
+    profiles: [tools]
+    environment:
+      ADMINER_DEFAULT_SERVER: db
+    ports:
+      - "127.0.0.1:${ADMINER_PORT:-8080}:8080"
+    networks: [backend, egress]
+    depends_on: [db]
+
+  # The storage service never publishes a port itself; this proxy exposes only its
+  # web console, only while the tools profile is up.
+  storage-console:
+    <<: *hardening
+    image: alpine/socat:1.8.1.3
+    profiles: [tools]
+    command: TCP-LISTEN:9001,fork,reuseaddr TCP:storage:9001
+    ports:
+      - "127.0.0.1:${STORAGE_CONSOLE_PORT:-9001}:9001"
+    networks: [backend, egress]
+    depends_on: [storage]
+
+networks:
+  # No internet access for the database and storage.
+  backend:
+    internal: true
+  egress: {}
+
+volumes:
+  pgdata:
+  storagedata:

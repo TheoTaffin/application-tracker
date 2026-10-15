@@ -1,0 +1,15 @@
+# Overlay for host-side development (`make dev`): runs the database and storage in
+# Docker and publishes them on 127.0.0.1 so `next dev` on the host can reach them.
+# Only ever loaded explicitly with -f; never use it for a deployment.
+#
+# Ports can't be published from an `internal` network, so these services also join
+# `egress` here (in the default stack they have no internet access).
+services:
+  db:
+    networks: [backend, egress]
+    ports:
+      - "127.0.0.1:${DEV_DB_PORT:-5432}:5432"
+  storage:
+    networks: [backend, egress]
+    ports:
+      - "127.0.0.1:${DEV_STORAGE_PORT:-9000}:9000"
