@@ -21,22 +21,25 @@ repos:
     hooks:
       - id: gitleaks
 
-  # JS tooling runs through npm scripts so it uses the versions locked in package-lock.json.
+  # JS tooling needs the project's own dependencies (eslint plugins, @types, Next's generated
+  # types), so it runs as local hooks. The environment is managed by the repo (`make setup` ->
+  # npm ci), not by pre-commit. Hooks only call package.json scripts, so flags and versions
+  # live in one place, and `npm run` never downloads anything.
   - repo: local
     hooks:
       - id: prettier
         name: prettier
-        entry: npx prettier --write --ignore-unknown
-        language: system
+        entry: npm run --silent format --
+        language: unsupported
         types_or: [ts, tsx, javascript, json, css, markdown, yaml]
       - id: eslint
         name: eslint
-        entry: npx eslint --fix --max-warnings=0
-        language: system
+        entry: npm run --silent lint:fix --
+        language: unsupported
         types_or: [ts, tsx, javascript]
       - id: typecheck
         name: typecheck
-        entry: npm run typecheck
-        language: system
-        types_or: [ts, tsx]
+        entry: npm run --silent typecheck
+        language: unsupported
+        files: \.(ts|tsx)$|^(package\.json|tsconfig\.json)$
         pass_filenames: false

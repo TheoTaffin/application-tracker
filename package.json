@@ -7,21 +7,22 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint --max-warnings=0",
+    "lint:fix": "eslint --max-warnings=0 --fix",
     "typecheck": "next typegen && tsc --noEmit",
-    "format": "prettier --write .",
-    "format:check": "prettier --check ."
+    "format": "prettier --write --ignore-unknown",
+    "format:check": "prettier --check --ignore-unknown ."
   },
   "dependencies": {
     "next": "16.4.1",
-    "react": "19.3.0",
-    "react-dom": "19.3.0"
+    "react": "19.3.1",
+    "react-dom": "19.3.1"
   },
   "devDependencies": {
     "@tailwindcss/turbopack": "^4",
-    "@types/node": "^20",
+    "@types/node": "^24.19.2",
     "@types/react": "^19",
     "@types/react-dom": "^19",
-    "eslint": "^9",
+    "eslint": "^9.39.5",
     "eslint-config-next": "16.4.1",
     "eslint-config-prettier": "10.1.8",
     "prettier": "3.9.10",

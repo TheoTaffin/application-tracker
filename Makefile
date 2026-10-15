@@ -15,4 +15,4 @@ lint: ## Run every check on the whole repo (branch protection only applies on co
 	SKIP=no-commit-to-branch uv run pre-commit run --all-files
 
 format: ## Format all files with Prettier
-	npm run format
+	npm run format -- .
