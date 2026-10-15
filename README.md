@@ -86,7 +86,7 @@ make up      # build and start, then open http://127.0.0.1:3000
 ```bash
 make dev                # db + storage in Docker, published on 127.0.0.1 only
 make seed               # optional: fictional demo data, only into an empty database
-npm run dev             # Next.js on the host, reads .env
+npm run dev             # Next.js on http://127.0.0.1:3000 (loopback only), reads .env
 make test               # unit tests
 make test-integration   # services against real Postgres + storage (isolated test db/bucket)
 make lint               # every pre-commit check on the whole repo

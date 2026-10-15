@@ -46,7 +46,7 @@ export function SidePanel({
   return (
     <aside
       aria-label={`${a.company} details`}
-      className="sticky top-20 hidden w-[380px] shrink-0 flex-col overflow-hidden rounded-lg border border-sand-300 bg-paper shadow-card xl:flex"
+      className="flex w-full shrink-0 flex-col overflow-hidden rounded-lg border border-sand-300 bg-paper shadow-card xl:sticky xl:top-20 xl:w-[380px]"
     >
       <div className="border-b border-sand-300 bg-sand-200/50 px-4 pt-4">
         <div className="flex items-start justify-between gap-2">

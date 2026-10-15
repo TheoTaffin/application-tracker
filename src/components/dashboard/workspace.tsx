@@ -1,6 +1,5 @@
 "use client";
 
-import { useRouter } from "next/navigation";
 import { useMemo } from "react";
 import { FOLLOW_UP_HORIZON_DAYS } from "@/lib/constants";
 import type {
@@ -66,7 +65,6 @@ function visible(all: WorkspaceApplication[], state: DashboardState) {
  * re-renders the data only after a change is saved.
  */
 export function DashboardWorkspace({ workspace }: { workspace: Workspace }) {
-  const router = useRouter();
   const [state, update] = useDashboardState();
   const { dashboard, applications, options } = workspace;
 
@@ -92,12 +90,7 @@ export function DashboardWorkspace({ workspace }: { workspace: Workspace }) {
   // The panel follows what the table shows: a selection hidden by filters gives way.
   const selected = rows.find((a) => a.id === state.selected) ?? rows[0];
 
-  const open = (id: string) => {
-    // Wide screens show the side panel; narrow ones go to the application page.
-    if (window.matchMedia("(min-width: 1280px)").matches)
-      update({ selected: id });
-    else router.push(`/applications/${id}`);
-  };
+  const select = (id: string) => update({ selected: id });
 
   return (
     <>
@@ -113,9 +106,9 @@ export function DashboardWorkspace({ workspace }: { workspace: Workspace }) {
         today={dashboard.today}
         hours={FOLLOW_UP_HORIZON_DAYS * 24}
         options={options}
-        onSelect={open}
+        onSelect={select}
       />
-      <div className="flex items-start gap-6">
+      <div className="flex flex-col items-stretch gap-6 xl:flex-row xl:items-start">
         <ApplicationsTable
           applications={rows}
           state={state}
@@ -123,7 +116,7 @@ export function DashboardWorkspace({ workspace }: { workspace: Workspace }) {
           today={dashboard.today}
           selectedId={selected?.id}
           onChange={update}
-          onOpen={open}
+          onOpen={select}
         />
         {selected && (
           <SidePanel
