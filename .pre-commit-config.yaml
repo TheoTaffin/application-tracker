@@ -1,6 +1,16 @@
 # Run `make setup` once after cloning, then hooks run on every commit.
 # Run all checks manually with `make lint`.
+default_install_hook_types: [pre-commit, commit-msg]
+default_stages: [pre-commit]
+
 repos:
+  # Commit messages must follow Conventional Commits (https://www.conventionalcommits.org).
+  - repo: https://github.com/compilerla/conventional-pre-commit
+    rev: v4.4.0
+    hooks:
+      - id: conventional-pre-commit
+        stages: [commit-msg]
+
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v6.0.0
     hooks:
