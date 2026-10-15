@@ -25,9 +25,12 @@ export function StatusUpdateForm({
   currentStatus,
   contacts,
   currentContactId,
+  onSaved,
 }: {
   applicationId: string;
   currentStatus: ApplicationStatus;
+  /** Called after a successful save (e.g. to close a dialog). */
+  onSaved?: () => void;
   contacts: { id: string; name: string; company: string | null }[];
   currentContactId: string | null;
 }) {
@@ -63,6 +66,7 @@ export function StatusUpdateForm({
       setContactId(KEEP);
       setFieldErrors({});
       setSaved(true);
+      onSaved?.();
     });
   };
 

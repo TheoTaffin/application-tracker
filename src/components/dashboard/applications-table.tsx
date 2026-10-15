@@ -1,47 +1,18 @@
-import { Inbox } from "lucide-react";
-import Link from "next/link";
+"use client";
+
+import { Inbox, Search } from "lucide-react";
 import { StatusBadge } from "@/components/ui/badge";
 import { buttonClass } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/card";
 import { cx } from "@/lib/cx";
 import { formatDate, formatWorkload, relativeDay } from "@/lib/format";
-import type { ApplicationSummary } from "@/server/services/application-service";
-
-export const FILTERS = [
-  { key: "open", label: "All open" },
-  { key: "pending", label: "Pending" },
-  { key: "ongoing", label: "On-going" },
-  { key: "closed", label: "Closed" },
-  { key: "all", label: "Everything" },
-] as const;
-export type FilterKey = (typeof FILTERS)[number]["key"];
-
-export const SORTS = [
-  { key: "next_action", label: "Next action" },
-  { key: "updated", label: "Recently updated" },
-  { key: "applied", label: "Applied" },
-  { key: "company", label: "Company" },
-] as const;
-export type SortKey = (typeof SORTS)[number]["key"];
-
-export interface TableState {
-  filter: FilterKey;
-  sort: SortKey;
-  q?: string;
-  selected?: string;
-}
-
-/** Dashboard URL for a state change, keeping the other parameters. */
-export function dashboardHref(state: TableState, change: Partial<TableState>) {
-  const next = { ...state, ...change };
-  const params = new URLSearchParams();
-  if (next.filter !== "open") params.set("group", next.filter);
-  if (next.sort !== "next_action") params.set("sort", next.sort);
-  if (next.q) params.set("q", next.q);
-  if (next.selected) params.set("selected", next.selected);
-  const query = params.toString();
-  return query ? `/?${query}` : "/";
-}
+import type { WorkspaceApplication } from "@/server/services/application-service";
+import {
+  FILTERS,
+  SORTS,
+  type DashboardState,
+  type FilterKey,
+} from "./url-state";
 
 function CompanyMark({ name }: { name: string }) {
   return (
@@ -57,28 +28,32 @@ export function ApplicationsTable({
   counts,
   today,
   selectedId,
+  onChange,
+  onOpen,
 }: {
-  applications: ApplicationSummary[];
-  state: TableState;
+  applications: WorkspaceApplication[];
+  state: DashboardState;
   counts: Record<FilterKey, number>;
   today: string;
   selectedId?: string;
+  onChange: (change: Partial<DashboardState>) => void;
+  /** Row activated (click or Enter). */
+  onOpen: (id: string) => void;
 }) {
   return (
     <section className="flex min-w-0 flex-1 flex-col overflow-hidden rounded-lg border border-sand-300 bg-paper shadow-card">
       <div className="flex flex-wrap items-center justify-between gap-2 border-b border-sand-200 p-3.5">
-        <nav
+        <div
+          role="group"
           aria-label="Filter applications"
           className="flex flex-wrap items-center gap-1.5"
         >
           {FILTERS.map((f) => (
-            <Link
+            <button
+              type="button"
               key={f.key}
-              href={dashboardHref(state, {
-                filter: f.key,
-                selected: undefined,
-              })}
-              aria-current={state.filter === f.key ? "page" : undefined}
+              onClick={() => onChange({ filter: f.key })}
+              aria-pressed={state.filter === f.key}
               className={buttonClass(
                 state.filter === f.key ? "primary" : "secondary",
                 "sm",
@@ -87,43 +62,51 @@ export function ApplicationsTable({
             >
               {f.label}{" "}
               <span className="tabular opacity-70">({counts[f.key]})</span>
-            </Link>
+            </button>
           ))}
-        </nav>
-        <nav
-          aria-label="Sort applications"
-          className="flex items-center gap-1 text-xs text-ink-subtle"
-        >
-          Sort:
-          {SORTS.map((s) => (
-            <Link
-              key={s.key}
-              href={dashboardHref(state, { sort: s.key })}
-              aria-current={state.sort === s.key ? "true" : undefined}
-              className={cx(
-                "rounded px-1.5 py-0.5",
-                state.sort === s.key
-                  ? "bg-sand-200 font-medium text-ink"
-                  : "hover:text-ink",
-              )}
-            >
-              {s.label}
-            </Link>
-          ))}
-        </nav>
+        </div>
+        <div className="relative w-56">
+          <Search className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-ink-subtle" />
+          <input
+            type="search"
+            value={state.q}
+            onChange={(e) => onChange({ q: e.target.value })}
+            placeholder="Search company or role…"
+            aria-label="Search applications"
+            className="h-7 w-full rounded border border-sand-300 bg-white pr-2 pl-8 text-xs shadow-sm placeholder:text-ink-subtle focus:border-forest-700 focus:outline-none"
+          />
+        </div>
+      </div>
+      <div className="flex items-center gap-1 border-b border-sand-200 px-3.5 py-2 text-xs text-ink-subtle">
+        Sort by
+        {SORTS.map((s) => (
+          <button
+            type="button"
+            key={s.key}
+            onClick={() => onChange({ sort: s.key })}
+            aria-pressed={state.sort === s.key}
+            className={cx(
+              "rounded px-1.5 py-0.5",
+              state.sort === s.key
+                ? "bg-sand-200 font-medium text-ink"
+                : "hover:text-ink",
+            )}
+          >
+            {s.label}
+          </button>
+        ))}
       </div>
 
       {applications.length === 0 ? (
         <EmptyState
           icon={<Inbox className="size-8" />}
-          title={state.q ? "No matches" : "Nothing here yet"}
+          title={state.q ? "No matches" : "Nothing here"}
         >
           {state.q ? (
             <>No application matches “{state.q}”.</>
           ) : (
             <>
-              Add your first application with <strong>+ Add application</strong>
-              .
+              Add an application with <strong>+ Add application</strong>.
             </>
           )}
         </EmptyState>
@@ -135,7 +118,7 @@ export function ApplicationsTable({
                 <th className="px-4 py-2.5 font-semibold">Company</th>
                 <th className="px-3 py-2.5 font-semibold">Position</th>
                 <th className="px-3 py-2.5 font-semibold">Location</th>
-                <th className="px-3 py-2.5 font-semibold">Status</th>
+                <th className="px-3 py-2.5 font-semibold">Current stage</th>
                 <th className="px-3 py-2.5 font-semibold">Next action</th>
                 <th className="px-3 py-2.5 text-right font-semibold">
                   Applied
@@ -152,26 +135,23 @@ export function ApplicationsTable({
                 return (
                   <tr
                     key={a.id}
+                    onClick={() => onOpen(a.id)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        onOpen(a.id);
+                      }
+                    }}
+                    tabIndex={0}
+                    aria-selected={selected}
                     className={cx(
-                      "relative transition-colors",
+                      "cursor-pointer transition-colors focus-visible:outline-offset-[-2px]",
                       selected
                         ? "bg-sand-50 shadow-[inset_2px_0_0_var(--color-forest-800)]"
                         : "hover:bg-sand-50/70",
                     )}
                   >
                     <td className="px-4 py-3">
-                      {/* Wide screens: select into the side panel. Narrow: open the page. */}
-                      <Link
-                        href={dashboardHref(state, { selected: a.id })}
-                        scroll={false}
-                        className="absolute inset-0 hidden xl:block"
-                        aria-label={`Show ${a.company} in the side panel`}
-                      />
-                      <Link
-                        href={`/applications/${a.id}`}
-                        className="absolute inset-0 xl:hidden"
-                        aria-label={`Open ${a.company}`}
-                      />
                       <div className="flex items-center gap-2.5">
                         <CompanyMark name={a.company} />
                         <div>
@@ -199,6 +179,11 @@ export function ApplicationsTable({
                     </td>
                     <td className="px-3 py-3">
                       <StatusBadge status={a.status} />
+                      {a.activeStage && (
+                        <span className="mt-1 block max-w-[14rem] truncate text-[10px] text-ink-subtle">
+                          {a.activeStage.name}
+                        </span>
+                      )}
                     </td>
                     <td className="px-3 py-3">
                       {due ? (
@@ -240,15 +225,13 @@ export function ApplicationsTable({
           {state.q && <> matching “{state.q}”</>}
         </span>
         {state.filter !== "closed" && counts.closed > 0 && (
-          <Link
-            href={dashboardHref(state, {
-              filter: "closed",
-              selected: undefined,
-            })}
+          <button
+            type="button"
+            onClick={() => onChange({ filter: "closed" })}
             className="font-medium text-ink hover:underline"
           >
             View closed ({counts.closed}) →
-          </Link>
+          </button>
         )}
       </div>
     </section>

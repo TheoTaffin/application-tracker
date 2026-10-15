@@ -30,6 +30,23 @@ export function NavLink({
   return (
     <Link
       href={href}
+      onClick={(e) => {
+        // On the dashboard, filters change in place (no navigation, no reload).
+        if (
+          pathname === "/" &&
+          url.pathname === "/" &&
+          !e.metaKey &&
+          !e.ctrlKey
+        ) {
+          e.preventDefault();
+          const next = new URLSearchParams(searchParams);
+          if (group) next.set("group", group);
+          else next.delete("group");
+          next.delete("selected");
+          const query = next.toString();
+          window.history.pushState(null, "", query ? `/?${query}` : "/");
+        }
+      }}
       aria-current={active ? "page" : undefined}
       className={cx(
         "flex items-center justify-between rounded-md px-3 py-1.5 text-xs transition-colors",

@@ -1,12 +1,14 @@
-import { ArrowRight, BellRing } from "lucide-react";
-import Link from "next/link";
+"use client";
+
+import { BellRing } from "lucide-react";
+import { LogUpdateButton } from "@/components/applications/log-update-dialog";
 import { StatusBadge } from "@/components/ui/badge";
 import { Card, CardHeader } from "@/components/ui/card";
 import { cx } from "@/lib/cx";
 import { relativeDay } from "@/lib/format";
-import {
-  FOLLOW_UP_HORIZON_DAYS,
-  type Dashboard,
+import type {
+  FormOptions,
+  WorkspaceApplication,
 } from "@/server/services/application-service";
 
 const chip = {
@@ -16,31 +18,46 @@ const chip = {
   later: "border-sand-300 bg-sand-100 text-ink-muted",
 };
 
-export function FollowUps({ dashboard }: { dashboard: Dashboard }) {
-  const { followUps, today } = dashboard;
-  if (followUps.length === 0) return null;
+export function FollowUps({
+  items,
+  today,
+  hours,
+  options,
+  onSelect,
+}: {
+  items: WorkspaceApplication[];
+  today: string;
+  hours: number;
+  options: FormOptions;
+  onSelect: (id: string) => void;
+}) {
+  if (items.length === 0) return null;
 
   return (
     <Card>
       <CardHeader
         icon={<BellRing className="size-[18px] text-terra-700" />}
         title="Upcoming follow-ups"
-        description={`Overdue and due in the next ${FOLLOW_UP_HORIZON_DAYS * 24} hours.`}
+        description={`Overdue and due in the next ${hours} hours.`}
         actions={
           <span className="font-mono text-xs text-ink-subtle">
-            {followUps.length} {followUps.length === 1 ? "item" : "items"}
+            {items.length} {items.length === 1 ? "item" : "items"}
           </span>
         }
       />
       <ul className="grid grid-cols-1 gap-4 p-5 md:grid-cols-2 xl:grid-cols-3">
-        {followUps.map((a) => {
+        {items.map((a) => {
           const due = relativeDay(a.nextActionAt!, today);
           return (
             <li
               key={a.id}
               className="flex flex-col justify-between rounded-lg border border-sand-300 bg-white p-4 shadow-sm transition-colors hover:border-sand-400"
             >
-              <div>
+              <button
+                type="button"
+                onClick={() => onSelect(a.id)}
+                className="text-left"
+              >
                 <div className="mb-2 flex items-center justify-between gap-2">
                   <span
                     className={cx(
@@ -53,25 +70,30 @@ export function FollowUps({ dashboard }: { dashboard: Dashboard }) {
                   <StatusBadge status={a.status} />
                 </div>
                 <h3 className="text-base font-semibold">{a.company}</h3>
-                <p className="mt-0.5 text-xs text-ink-muted">{a.role}</p>
+                <p className="mt-0.5 text-xs text-ink-muted">
+                  {a.activeStage ? a.activeStage.name : a.role}
+                </p>
                 {a.nextActionNote && (
                   <p className="mt-3 border-t border-sand-200 pt-2.5 text-xs leading-relaxed text-ink">
                     {a.nextActionNote}
                   </p>
                 )}
-              </div>
+              </button>
               <div className="mt-4 flex items-center justify-between border-t border-sand-200 pt-2.5">
                 <span className="text-[11px] text-ink-subtle">
                   {a.contactName
                     ? `Contact: ${a.contactName}`
                     : "No contact yet"}
                 </span>
-                <Link
-                  href={`/applications/${a.id}#update`}
-                  className="flex items-center gap-1 text-xs font-medium text-terra-700 hover:text-terra-800"
-                >
-                  Log update <ArrowRight className="size-3" />
-                </Link>
+                <LogUpdateButton
+                  applicationId={a.id}
+                  company={a.company}
+                  currentStatus={a.status}
+                  contacts={options.contacts}
+                  currentContactId={a.contact?.id ?? null}
+                  variant="ghost"
+                  className="h-7 px-2 text-terra-700"
+                />
               </div>
             </li>
           );

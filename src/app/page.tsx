@@ -1,108 +1,15 @@
-import { Plus } from "lucide-react";
+import { connection } from "next/server";
 import { Suspense } from "react";
-import {
-  ApplicationsTable,
-  FILTERS,
-  SORTS,
-  type FilterKey,
-  type SortKey,
-  type TableState,
-} from "@/components/dashboard/applications-table";
-import { FollowUps } from "@/components/dashboard/follow-ups";
-import { GroupCards } from "@/components/dashboard/group-cards";
-import { Inspector } from "@/components/dashboard/inspector";
+import { AddApplicationButton } from "@/components/applications/add-application-button";
+import { DashboardWorkspace } from "@/components/dashboard/workspace";
 import { PageHeader } from "@/components/layout/page-header";
-import { SearchBox } from "@/components/layout/search-box";
-import { ButtonLink } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/card";
-import { APPLICATION_STATUSES, statusGroup } from "@/lib/status";
-import { loadDashboard } from "@/server/queries";
-import {
-  getApplication,
-  listApplications,
-} from "@/server/services/application-service";
+import { getWorkspace } from "@/server/services/application-service";
 
-type SearchParams = Promise<Record<string, string | string[] | undefined>>;
-
-const one = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v);
-
-function parseState(params: Awaited<SearchParams>): TableState {
-  const group = one(params.group);
-  const sort = one(params.sort);
-  return {
-    filter: FILTERS.some((f) => f.key === group)
-      ? (group as FilterKey)
-      : "open",
-    sort: SORTS.some((s) => s.key === sort) ? (sort as SortKey) : "next_action",
-    q: one(params.q)?.trim() || undefined,
-    selected: one(params.selected),
-  };
-}
-
-const OPEN_STATUSES = APPLICATION_STATUSES.filter(
-  (s) => statusGroup(s) !== "closed",
-);
-
-async function DashboardContent({
-  searchParams,
-}: {
-  searchParams: SearchParams;
-}) {
-  const state = parseState(await searchParams);
-  const dashboard = await loadDashboard();
-  const applications = await listApplications({
-    group:
-      state.filter === "pending" ||
-      state.filter === "ongoing" ||
-      state.filter === "closed"
-        ? state.filter
-        : undefined,
-    statuses: state.filter === "open" ? [...OPEN_STATUSES] : undefined,
-    search: state.q,
-    sort: state.sort,
-  });
-  const { pending, ongoing, closed } = dashboard.byGroup;
-  const counts = {
-    open: pending + ongoing,
-    pending,
-    ongoing,
-    closed,
-    all: dashboard.total,
-  };
-
-  const selectedId = applications.some((a) => a.id === state.selected)
-    ? state.selected
-    : applications[0]?.id;
-  const selected = selectedId ? await getApplication(selectedId) : null;
-
-  return (
-    <>
-      <GroupCards dashboard={dashboard} />
-      <FollowUps dashboard={dashboard} />
-      <div className="flex items-start gap-6">
-        <ApplicationsTable
-          applications={applications}
-          state={state}
-          counts={counts}
-          today={dashboard.today}
-          selectedId={selected?.id}
-        />
-        {selected && (
-          <Inspector application={selected} today={dashboard.today} />
-        )}
-      </div>
-    </>
-  );
-}
-
-async function HeaderSearch({ searchParams }: { searchParams: SearchParams }) {
-  const state = parseState(await searchParams);
-  return (
-    <SearchBox
-      defaultValue={state.q}
-      group={state.filter === "open" ? undefined : state.filter}
-    />
-  );
+async function Dashboard() {
+  await connection();
+  const workspace = await getWorkspace();
+  return <DashboardWorkspace workspace={workspace} />;
 }
 
 function DashboardSkeleton() {
@@ -118,26 +25,21 @@ function DashboardSkeleton() {
   );
 }
 
-export default function DashboardPage({ searchParams }: PageProps<"/">) {
+export default function DashboardPage() {
   return (
     <>
       <PageHeader
         title="Applications"
         subtitle="Every application, its status and what comes next."
         actions={
-          <>
-            <Suspense fallback={<SearchBox />}>
-              <HeaderSearch searchParams={searchParams} />
-            </Suspense>
-            <ButtonLink href="/?new" variant="primary" scroll={false}>
-              <Plus className="size-3.5" /> Add application
-            </ButtonLink>
-          </>
+          <Suspense>
+            <AddApplicationButton />
+          </Suspense>
         }
       />
       <main className="flex-1 space-y-6 p-4 md:p-8">
         <Suspense fallback={<DashboardSkeleton />}>
-          <DashboardContent searchParams={searchParams} />
+          <Dashboard />
         </Suspense>
       </main>
     </>

@@ -40,6 +40,9 @@ interface Demo {
   description?: string;
   formAnswers?: string;
   events: Event[];
+  /** Custom stages: [name, state, days from today (negative = past), note]. */
+  stages?: [string, string, number | null, string?][];
+  notes?: string[];
 }
 
 const demos: Demo[] = [
@@ -62,6 +65,16 @@ const demos: Demo[] = [
       ["acknowledged", 22, "Automatic confirmation"],
       ["screening", 15, "30 min call with Lena, went well"],
       ["interview_1", 2, "Technical round with the platform lead"],
+    ],
+    stages: [
+      ["Recruiter screen", "passed", -15, "30 min with Lena Brunner"],
+      ["Technical round", "active", -2, "Live SQL + pipeline design with the platform lead"],
+      ["Team fit & leadership", "planned", null],
+      ["Offer", "planned", null],
+    ],
+    notes: [
+      "They migrate from Hadoop to Databricks this year: mention the Delta Lake project.",
+      "Lena said the team is 8 people, reporting to the Head of Data.",
     ],
   },
   {
@@ -99,6 +112,13 @@ const demos: Demo[] = [
       ["interview_2plus", 12, "Panel with the CTO"],
       ["offer", 3, "Written offer received"],
     ],
+    stages: [
+      ["Initial recruiter screen", "passed", -28],
+      ["Portfolio deep dive", "passed", -20, "Walkthrough with the VP Engineering"],
+      ["Leadership panel", "passed", -12, "Panel with the CTO"],
+      ["Offer & final review", "active", 3, "Decision window until Friday"],
+    ],
+    notes: ["Compare remote flexibility with the Alpenbank process before deciding."],
   },
   {
     company: "Bergbahn Digital",
@@ -198,6 +218,18 @@ for (const d of demos) {
       d.formAnswers ?? null,
     ],
   );
+  for (const [i, [name, state, inDays, note]] of (d.stages ?? []).entries()) {
+    await client.query(
+      "INSERT INTO application_stages (application_id, name, position, state, date, note) VALUES ($1, $2, $3, $4, $5, $6)",
+      [app.rows[0].id, name, i, state, inDays === null ? null : day(inDays), note ?? null],
+    );
+  }
+  for (const body of d.notes ?? []) {
+    await client.query("INSERT INTO application_notes (application_id, body) VALUES ($1, $2)", [
+      app.rows[0].id,
+      body,
+    ]);
+  }
   for (const [status, daysAgo, note] of d.events) {
     await client.query(
       "INSERT INTO status_events (application_id, status, occurred_at, note) VALUES ($1, $2, $3, $4)",

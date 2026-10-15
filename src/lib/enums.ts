@@ -19,3 +19,13 @@ export type StatusEventSource = (typeof STATUS_EVENT_SOURCES)[number];
 
 export const FILE_KINDS = ["resume", "attachment"] as const;
 export type FileKind = (typeof FILE_KINDS)[number];
+
+/** State of a custom, user-named stage in an application's process. */
+export const STAGE_STATES = [
+  "planned",
+  "active",
+  "passed",
+  "failed",
+  "cancelled",
+] as const;
+export type StageState = (typeof STAGE_STATES)[number];

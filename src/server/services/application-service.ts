@@ -5,7 +5,10 @@ import * as applicationsRepo from "@/server/repositories/applications";
 import * as contactsRepo from "@/server/repositories/contacts";
 import * as eventsRepo from "@/server/repositories/status-events";
 import * as filesRepo from "@/server/repositories/files";
+import * as notesRepo from "@/server/repositories/notes";
+import * as stagesRepo from "@/server/repositories/stages";
 import * as storage from "@/server/storage/s3";
+import { APP_TIME_ZONE, FOLLOW_UP_HORIZON_DAYS } from "@/lib/constants";
 import {
   APPLICATION_STATUSES,
   STATUS_GROUPS,
@@ -23,16 +26,19 @@ import {
 import {
   toContactDTO,
   toFileDTO,
+  toNoteDTO,
+  toStageDTO,
   toStatusEventDTO,
   type ContactDTO,
   type FileDTO,
+  type NoteDTO,
+  type StageDTO,
   type StatusEventDTO,
 } from "./dto";
 import { InvalidInputError, NotFoundError, parseInput } from "./errors";
 import { deleteFile, uploadFile } from "./file-service";
 
-/** Dates are compared in Swiss local time ("due today" means today in Zurich). */
-export const APP_TIME_ZONE = "Europe/Zurich";
+export { APP_TIME_ZONE, FOLLOW_UP_HORIZON_DAYS };
 
 export function todayInAppTimeZone(now = new Date()): string {
   // en-CA formats as YYYY-MM-DD.
@@ -47,9 +53,6 @@ export function addDays(date: string, days: number): string {
   d.setUTCDate(d.getUTCDate() + days);
   return d.toISOString().slice(0, 10);
 }
-
-/** Follow-ups due within this many days (plus overdue ones) appear on the dashboard. */
-export const FOLLOW_UP_HORIZON_DAYS = 2;
 
 // ---------------------------------------------------------------------------- DTOs
 
@@ -78,9 +81,32 @@ export interface ApplicationDetail extends Omit<
   status: ApplicationStatus;
   statusGroup: StatusGroup;
   events: StatusEventDTO[];
+  stages: StageDTO[];
+  notes: NoteDTO[];
   contact: ContactDTO | null;
   resume: FileDTO | null;
   attachments: FileDTO[];
+}
+
+/** Everything the dashboard's side panel shows for one application. */
+export interface WorkspaceApplication extends ApplicationSummary {
+  offerUrl: string | null;
+  salaryAsk: number | null;
+  viaAgency: boolean;
+  events: StatusEventDTO[];
+  stages: StageDTO[];
+  notes: NoteDTO[];
+  /** The stage marked active, if any: "where I am" in the process. */
+  activeStage: StageDTO | null;
+  contact: ContactDTO | null;
+  resume: FileDTO | null;
+  attachments: FileDTO[];
+}
+
+export interface Workspace {
+  dashboard: Dashboard;
+  applications: WorkspaceApplication[];
+  options: FormOptions;
 }
 
 export interface Dashboard {
@@ -163,6 +189,10 @@ export async function getDashboard(now = new Date()): Promise<Dashboard> {
   const all = (
     await applicationsRepo.listApplications(db(), { sort: "updated" })
   ).map(toSummary);
+  return summarize(all, now);
+}
+
+function summarize(all: ApplicationSummary[], now: Date): Dashboard {
   const byGroup = Object.fromEntries(
     STATUS_GROUPS.map((g) => [g, 0]),
   ) as Record<StatusGroup, number>;
@@ -201,12 +231,15 @@ export async function getApplication(
   const tx = db();
   const row = await applicationsRepo.findApplication(tx, parsed.data);
   if (!row) return null;
-  const [events, attachments, contact, resume] = await Promise.all([
-    eventsRepo.listStatusEvents(tx, row.id),
-    filesRepo.listAttachments(tx, row.id),
-    row.contactId ? contactsRepo.findContact(tx, row.contactId) : undefined,
-    row.resumeId ? filesRepo.findFile(tx, row.resumeId) : undefined,
-  ]);
+  const [events, attachments, contact, resume, stages, notes] =
+    await Promise.all([
+      eventsRepo.listStatusEvents(tx, row.id),
+      filesRepo.listAttachments(tx, row.id),
+      row.contactId ? contactsRepo.findContact(tx, row.contactId) : undefined,
+      row.resumeId ? filesRepo.findFile(tx, row.resumeId) : undefined,
+      stagesRepo.listStages(tx, [row.id]),
+      notesRepo.listNotes(tx, [row.id]),
+    ]);
   // Every application is created with an event, so events[0] exists.
   const status = events[0].status;
   return {
@@ -214,10 +247,79 @@ export async function getApplication(
     status,
     statusGroup: statusGroup(status),
     events: events.map(toStatusEventDTO),
+    stages: stages.map(toStageDTO),
+    notes: notes.map(toNoteDTO),
     contact: contact ? toContactDTO(contact) : null,
     resume: resume ? toFileDTO(resume) : null,
     attachments: attachments.map(toFileDTO),
   };
+}
+
+function groupBy<T>(rows: T[], key: (row: T) => string | null) {
+  const map = new Map<string, T[]>();
+  for (const row of rows) {
+    const k = key(row);
+    if (k === null) continue;
+    const list = map.get(k);
+    if (list) list.push(row);
+    else map.set(k, [row]);
+  }
+  return map;
+}
+
+/**
+ * Dashboard data in one go: every application with what its side panel shows, plus
+ * the counters. A fixed number of queries regardless of how many applications exist,
+ * so the dashboard can switch selection and filters in the browser without reloading.
+ */
+export async function getWorkspace(now = new Date()): Promise<Workspace> {
+  const tx = db();
+  const rows = await applicationsRepo.listApplications(tx, { sort: "updated" });
+  const ids = rows.map((r) => r.application.id);
+  const contactIds = [
+    ...new Set(rows.flatMap((r) => r.application.contactId ?? [])),
+  ];
+  const resumeIds = [
+    ...new Set(rows.flatMap((r) => r.application.resumeId ?? [])),
+  ];
+  const [events, stages, notes, attachments, contacts, resumes, options] =
+    await Promise.all([
+      eventsRepo.listStatusEventsFor(tx, ids),
+      stagesRepo.listStages(tx, ids),
+      notesRepo.listNotes(tx, ids),
+      filesRepo.listAttachmentsFor(tx, ids),
+      contactsRepo.findContacts(tx, contactIds),
+      filesRepo.findFiles(tx, resumeIds),
+      getFormOptions(),
+    ]);
+  const eventsBy = groupBy(events, (e) => e.applicationId);
+  const stagesBy = groupBy(stages, (s) => s.applicationId);
+  const notesBy = groupBy(notes, (n) => n.applicationId);
+  const attachmentsBy = groupBy(attachments, (f) => f.applicationId);
+  const contactById = new Map(contacts.map((c) => [c.id, c]));
+  const resumeById = new Map(resumes.map((f) => [f.id, f]));
+
+  const applications = rows.map((row): WorkspaceApplication => {
+    const a = row.application;
+    const appStages = (stagesBy.get(a.id) ?? []).map(toStageDTO);
+    const contact = a.contactId ? contactById.get(a.contactId) : undefined;
+    const resume = a.resumeId ? resumeById.get(a.resumeId) : undefined;
+    return {
+      ...toSummary(row),
+      offerUrl: a.offerUrl,
+      salaryAsk: a.salaryAsk,
+      viaAgency: a.viaAgency,
+      events: (eventsBy.get(a.id) ?? []).map(toStatusEventDTO),
+      stages: appStages,
+      notes: (notesBy.get(a.id) ?? []).map(toNoteDTO),
+      activeStage: appStages.find((st) => st.state === "active") ?? null,
+      contact: contact ? toContactDTO(contact) : null,
+      resume: resume ? toFileDTO(resume) : null,
+      attachments: (attachmentsBy.get(a.id) ?? []).map(toFileDTO),
+    };
+  });
+
+  return { dashboard: summarize(applications, now), applications, options };
 }
 
 /** Choices for the application form's resume and contact pickers. */

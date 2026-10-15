@@ -1,5 +1,6 @@
+"use client";
+
 import { Archive, Hourglass, RefreshCw } from "lucide-react";
-import Link from "next/link";
 import { Dot } from "@/components/ui/badge";
 import { cx } from "@/lib/cx";
 import {
@@ -19,6 +20,7 @@ const CARDS: Record<
     noun: (n: number) => string;
     icon: React.ReactNode;
     frame: string;
+    selected: string;
     badge: string;
     eyebrow: string;
   }
@@ -28,6 +30,7 @@ const CARDS: Record<
     noun: (n) => `${n} ${n === 1 ? "application" : "applications"}`,
     icon: <Hourglass className="size-4" />,
     frame: "border-ochre-200",
+    selected: "ring-2 ring-ochre-200",
     badge: "border-ochre-200 bg-ochre-100 text-ochre-700",
     eyebrow: "text-ochre-700",
   },
@@ -36,6 +39,7 @@ const CARDS: Record<
     noun: (n) => `${n} in progress`,
     icon: <RefreshCw className="size-4" />,
     frame: "border-forest-200",
+    selected: "ring-2 ring-forest-200",
     badge: "border-forest-200 bg-forest-100 text-forest-700",
     eyebrow: "text-forest-700",
   },
@@ -44,6 +48,7 @@ const CARDS: Record<
     noun: (n) => `${n} ${n === 1 ? "application" : "applications"}`,
     icon: <Archive className="size-4" />,
     frame: "border-sand-300",
+    selected: "ring-2 ring-sand-300",
     badge: "border-sand-300 bg-sand-100 text-ink-muted",
     eyebrow: "text-ink-subtle",
   },
@@ -60,18 +65,29 @@ function breakdown(
   return parts.join(" · ") || "None yet";
 }
 
-export function GroupCards({ dashboard }: { dashboard: Dashboard }) {
+export function GroupCards({
+  dashboard,
+  active,
+  onSelect,
+}: {
+  dashboard: Dashboard;
+  active: string;
+  onSelect: (group: StatusGroup) => void;
+}) {
   return (
     <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
       {(Object.keys(CARDS) as StatusGroup[]).map((group) => {
         const card = CARDS[group];
         return (
-          <Link
+          <button
+            type="button"
             key={group}
-            href={`/?group=${group}`}
+            onClick={() => onSelect(group)}
+            aria-pressed={active === group}
             className={cx(
-              "flex items-start justify-between rounded-lg border bg-white p-4 shadow-card transition-colors hover:border-sand-400",
+              "flex items-start justify-between rounded-lg border bg-white p-4 text-left shadow-card transition-colors hover:border-sand-400",
               card.frame,
+              active === group && card.selected,
             )}
           >
             <div className="min-w-0">
@@ -96,7 +112,7 @@ export function GroupCards({ dashboard }: { dashboard: Dashboard }) {
             >
               {card.icon}
             </span>
-          </Link>
+          </button>
         );
       })}
     </div>

@@ -35,19 +35,29 @@ export function NewApplicationHost() {
     };
   }, [open]);
 
-  const close = () => {
+  // URL changes go through the History API: closing never reloads the page.
+  const close = (change?: (params: URLSearchParams) => void) => {
     const params = new URLSearchParams(searchParams);
     params.delete("new");
+    change?.(params);
     const query = params.toString();
-    router.replace(query ? `${pathname}?${query}` : pathname, {
-      scroll: false,
-    });
+    window.history.replaceState(
+      null,
+      "",
+      query ? `${pathname}?${query}` : pathname,
+    );
+  };
+
+  const created = (id: string) => {
+    // On the dashboard, show the new application in the side panel; elsewhere open it.
+    if (pathname === "/") close((params) => params.set("selected", id));
+    else router.push(`/applications/${id}`);
   };
 
   return (
     <Dialog
       open={open}
-      onClose={close}
+      onClose={() => close()}
       size="lg"
       title="New application"
       description="Paste the offer link to prefill the details, then review and save."
@@ -66,16 +76,11 @@ export function NewApplicationHost() {
             mode="create"
             options={options}
             autoExtractUrl={offerUrl}
-            onCancel={close}
-            onDone={(id) => router.push(`/applications/${id}`)}
+            onCancel={() => close()}
+            onDone={created}
           />
         )
       )}
     </Dialog>
   );
-}
-
-/** Opens the dialog by adding `?new` to the current URL. */
-export function newApplicationHref(pathname = "/") {
-  return `${pathname}?new`;
 }

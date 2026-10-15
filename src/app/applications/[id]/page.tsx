@@ -17,6 +17,8 @@ import {
 import { ContactCard } from "@/components/applications/contact-card";
 import { FileRow } from "@/components/applications/documents";
 import { StatusUpdateForm } from "@/components/applications/status-update-form";
+import { NotesPanel } from "@/components/applications/notes-panel";
+import { StageProgress } from "@/components/applications/stage-progress";
 import { Timeline } from "@/components/applications/timeline";
 import { PageHeader } from "@/components/layout/page-header";
 import { GroupBadge, StatusBadge } from "@/components/ui/badge";
@@ -183,6 +185,10 @@ async function Detail({
             </dl>
           </Card>
 
+          <Card className="p-5">
+            <StageProgress applicationId={a.id} stages={a.stages} />
+          </Card>
+
           {a.description && (
             <Card>
               <CardHeader title="Description" />
@@ -238,6 +244,13 @@ async function Detail({
                 contacts={options.contacts}
                 currentContactId={a.contact?.id ?? null}
               />
+            </div>
+          </Card>
+
+          <Card>
+            <CardHeader title="Notes" />
+            <div className="p-5">
+              <NotesPanel applicationId={a.id} notes={a.notes} />
             </div>
           </Card>
 
