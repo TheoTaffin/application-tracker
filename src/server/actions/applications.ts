@@ -8,6 +8,13 @@ import type { FileDTO, StatusEventDTO } from "@/server/services/dto";
 import { extractOfferInput } from "@/lib/validation";
 import { filesFrom, jsonPayload, runAction, type ActionResult } from "./result";
 
+/** Resume and contact choices for the application form. */
+export async function getFormOptionsAction(): Promise<
+  ActionResult<applications.FormOptions>
+> {
+  return runAction(() => applications.getFormOptions(), { mutates: false });
+}
+
 /** Fetch a job posting and return prefilled fields; nothing is saved. */
 export async function extractOfferAction(
   url: string,

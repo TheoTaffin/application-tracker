@@ -41,6 +41,16 @@ export function todayInAppTimeZone(now = new Date()): string {
   );
 }
 
+/** Add days to a YYYY-MM-DD date (calendar arithmetic, no time zone involved). */
+export function addDays(date: string, days: number): string {
+  const d = new Date(`${date}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + days);
+  return d.toISOString().slice(0, 10);
+}
+
+/** Follow-ups due within this many days (plus overdue ones) appear on the dashboard. */
+export const FOLLOW_UP_HORIZON_DAYS = 2;
+
 // ---------------------------------------------------------------------------- DTOs
 
 export interface ApplicationSummary {
@@ -77,7 +87,9 @@ export interface Dashboard {
   total: number;
   byGroup: Record<StatusGroup, number>;
   byStatus: Record<ApplicationStatus, number>;
-  /** Next action due today or overdue, soonest first. */
+  /** Today's date in the app time zone (YYYY-MM-DD), for relative labels. */
+  today: string;
+  /** Open applications whose next action is overdue or due within the horizon, soonest first. */
   followUps: ApplicationSummary[];
   /** Most recently updated applications. */
   recent: ApplicationSummary[];
@@ -162,16 +174,20 @@ export async function getDashboard(now = new Date()): Promise<Dashboard> {
     byStatus[a.status]++;
   }
   const today = todayInAppTimeZone(now);
+  const horizon = addDays(today, FOLLOW_UP_HORIZON_DAYS);
   const followUps = all
     .filter(
       (a) =>
-        a.statusGroup !== "closed" && a.nextActionAt && a.nextActionAt <= today,
+        a.statusGroup !== "closed" &&
+        a.nextActionAt &&
+        a.nextActionAt <= horizon,
     )
     .sort((a, b) => a.nextActionAt!.localeCompare(b.nextActionAt!));
   return {
     total: all.length,
     byGroup,
     byStatus,
+    today,
     followUps,
     recent: all.slice(0, 10),
   };
@@ -203,6 +219,25 @@ export async function getApplication(
     attachments: attachments.map(toFileDTO),
   };
 }
+
+/** Choices for the application form's resume and contact pickers. */
+export async function getFormOptions() {
+  const tx = db();
+  const [resumes, contacts] = await Promise.all([
+    filesRepo.listResumes(tx),
+    contactsRepo.listContacts(tx),
+  ]);
+  return {
+    resumes: resumes.map(({ file }) => ({ id: file.id, label: file.label })),
+    contacts: contacts.map(({ contact }) => ({
+      id: contact.id,
+      name: contact.name,
+      company: contact.company,
+    })),
+  };
+}
+
+export type FormOptions = Awaited<ReturnType<typeof getFormOptions>>;
 
 // ------------------------------------------------------------------------- writes
 

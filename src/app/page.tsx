@@ -1,69 +1,145 @@
-import Image from "next/image";
+import { Plus } from "lucide-react";
+import { Suspense } from "react";
+import {
+  ApplicationsTable,
+  FILTERS,
+  SORTS,
+  type FilterKey,
+  type SortKey,
+  type TableState,
+} from "@/components/dashboard/applications-table";
+import { FollowUps } from "@/components/dashboard/follow-ups";
+import { GroupCards } from "@/components/dashboard/group-cards";
+import { Inspector } from "@/components/dashboard/inspector";
+import { PageHeader } from "@/components/layout/page-header";
+import { SearchBox } from "@/components/layout/search-box";
+import { ButtonLink } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/card";
+import { APPLICATION_STATUSES, statusGroup } from "@/lib/status";
+import { loadDashboard } from "@/server/queries";
+import {
+  getApplication,
+  listApplications,
+} from "@/server/services/application-service";
 
-export default function Home() {
+type SearchParams = Promise<Record<string, string | string[] | undefined>>;
+
+const one = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v);
+
+function parseState(params: Awaited<SearchParams>): TableState {
+  const group = one(params.group);
+  const sort = one(params.sort);
+  return {
+    filter: FILTERS.some((f) => f.key === group)
+      ? (group as FilterKey)
+      : "open",
+    sort: SORTS.some((s) => s.key === sort) ? (sort as SortKey) : "next_action",
+    q: one(params.q)?.trim() || undefined,
+    selected: one(params.selected),
+  };
+}
+
+const OPEN_STATUSES = APPLICATION_STATUSES.filter(
+  (s) => statusGroup(s) !== "closed",
+);
+
+async function DashboardContent({
+  searchParams,
+}: {
+  searchParams: SearchParams;
+}) {
+  const state = parseState(await searchParams);
+  const dashboard = await loadDashboard();
+  const applications = await listApplications({
+    group:
+      state.filter === "pending" ||
+      state.filter === "ongoing" ||
+      state.filter === "closed"
+        ? state.filter
+        : undefined,
+    statuses: state.filter === "open" ? [...OPEN_STATUSES] : undefined,
+    search: state.q,
+    sort: state.sort,
+  });
+  const { pending, ongoing, closed } = dashboard.byGroup;
+  const counts = {
+    open: pending + ongoing,
+    pending,
+    ongoing,
+    closed,
+    all: dashboard.total,
+  };
+
+  const selectedId = applications.some((a) => a.id === state.selected)
+    ? state.selected
+    : applications[0]?.id;
+  const selected = selectedId ? await getApplication(selectedId) : null;
+
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert h-5 w-[100px]"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
+    <>
+      <GroupCards dashboard={dashboard} />
+      <FollowUps dashboard={dashboard} />
+      <div className="flex items-start gap-6">
+        <ApplicationsTable
+          applications={applications}
+          state={state}
+          counts={counts}
+          today={dashboard.today}
+          selectedId={selected?.id}
         />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the{" "}
-            <code className="rounded bg-black/[.06] px-1.5 py-0.5 font-mono text-[0.9em] dark:bg-white/[.08]">
-              page.tsx
-            </code>{" "}
-            file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
-        </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert h-[14px] w-4"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={14}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
+        {selected && (
+          <Inspector application={selected} today={dashboard.today} />
+        )}
+      </div>
+    </>
+  );
+}
+
+async function HeaderSearch({ searchParams }: { searchParams: SearchParams }) {
+  const state = parseState(await searchParams);
+  return (
+    <SearchBox
+      defaultValue={state.q}
+      group={state.filter === "open" ? undefined : state.filter}
+    />
+  );
+}
+
+function DashboardSkeleton() {
+  return (
+    <>
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+        {[0, 1, 2].map((i) => (
+          <Skeleton key={i} className="h-24" />
+        ))}
+      </div>
+      <Skeleton className="h-96" />
+    </>
+  );
+}
+
+export default function DashboardPage({ searchParams }: PageProps<"/">) {
+  return (
+    <>
+      <PageHeader
+        title="Applications"
+        subtitle="Every application, its status and what comes next."
+        actions={
+          <>
+            <Suspense fallback={<SearchBox />}>
+              <HeaderSearch searchParams={searchParams} />
+            </Suspense>
+            <ButtonLink href="/?new" variant="primary" scroll={false}>
+              <Plus className="size-3.5" /> Add application
+            </ButtonLink>
+          </>
+        }
+      />
+      <main className="flex-1 space-y-6 p-4 md:p-8">
+        <Suspense fallback={<DashboardSkeleton />}>
+          <DashboardContent searchParams={searchParams} />
+        </Suspense>
       </main>
-    </div>
+    </>
   );
 }

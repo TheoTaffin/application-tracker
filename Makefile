@@ -1,6 +1,6 @@
 .DEFAULT_GOAL := help
 .PHONY: help deps deps-py deps-js setup lint lint-commits lint-pr-title format test test-integration \
-	env build up down logs ps tools dev db-generate backup
+	env build up down logs ps tools dev seed db-generate backup
 
 COMPOSE := docker compose
 COMPOSE_DEV := docker compose -f compose.yaml -f compose.dev.yaml
@@ -82,6 +82,9 @@ tools: ## Start Adminer (127.0.0.1:8080) and the storage console (127.0.0.1:9001
 dev: ## Start database + storage for `npm run dev` on the host
 	$(COMPOSE_DEV) up -d --wait db storage
 	$(COMPOSE_DEV) run --rm --build init
+
+seed: ## Load fictional demo data into an empty dev database (after `make dev`)
+	node --env-file=.env scripts/seed.mts
 
 db-generate: ## Generate a migration from schema changes (drizzle/)
 	npx drizzle-kit generate

@@ -184,6 +184,26 @@ describe("listing and dashboard", () => {
     const dashboard = await applications.getDashboard(
       new Date("2026-10-15T10:00:00+02:00"),
     );
+    // Due within the two-day horizon also counts; three days out does not.
+    const soon = await applications.createApplication({
+      application: {
+        ...baseApplication,
+        company: "Soon AG",
+        nextActionAt: "2026-10-17",
+      },
+    });
+    await applications.createApplication({
+      application: {
+        ...baseApplication,
+        company: "Friday AG",
+        nextActionAt: "2026-10-18",
+      },
+    });
+    const withHorizon = await applications.getDashboard(
+      new Date("2026-10-15T10:00:00+02:00"),
+    );
+    expect(withHorizon.today).toBe("2026-10-15");
+    expect(withHorizon.followUps.map((a) => a.id)).toEqual([due.id, soon.id]);
     expect(dashboard.total).toBe(3);
     expect(dashboard.byGroup).toEqual({ pending: 2, ongoing: 0, closed: 1 });
     expect(dashboard.byStatus.rejected).toBe(1);
