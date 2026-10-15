@@ -1,0 +1,12 @@
+# Tooling-only Python project: pins the developer tools (pre-commit) via uv.lock.
+# The application itself is TypeScript; see package.json.
+[project]
+name = "application-followup-tooling"
+version = "0.1.0"
+requires-python = ">=3.13"
+
+[dependency-groups]
+dev = ["pre-commit==4.7.0"]
+
+[tool.uv]
+package = false
