@@ -1,5 +1,5 @@
 import "server-only";
-import { desc, eq } from "drizzle-orm";
+import { asc, desc, eq, inArray } from "drizzle-orm";
 import type { Executor } from "@/server/db/client";
 import { statusEvents } from "@/server/db/schema";
 import type { ApplicationStatus } from "@/lib/status";
@@ -45,4 +45,21 @@ export function latestStatusSubquery(tx: Executor) {
       desc(statusEvents.createdAt),
     )
     .as("latest_status");
+}
+
+/** Events of several applications, newest first within each application. */
+export async function listStatusEventsFor(
+  tx: Executor,
+  applicationIds: string[],
+) {
+  if (applicationIds.length === 0) return [];
+  return tx
+    .select()
+    .from(statusEvents)
+    .where(inArray(statusEvents.applicationId, applicationIds))
+    .orderBy(
+      asc(statusEvents.applicationId),
+      desc(statusEvents.occurredAt),
+      desc(statusEvents.createdAt),
+    );
 }

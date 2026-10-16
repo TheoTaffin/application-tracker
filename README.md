@@ -3,8 +3,6 @@
 Track job applications during a job search in Switzerland: the offer, what I wrote in the
 application form, the resume I sent, my contacts, and every status change until the outcome.
 
-> Status: backend foundation. The UI is being designed and comes next.
-
 ## Features
 
 - **Applications** with company, role, location, workload (e.g. 80–100%), salary ask (CHF),
@@ -14,6 +12,10 @@ application form, the resume I sent, my contacts, and every status change until 
 - **Resume library**: reuse a resume across applications or upload a new one. Other files
   (cover letters, screenshots…) attach to a single application.
 - **Contacts** shared across applications.
+- **Dashboard**: status groups with their detailed breakdown, follow-ups due in the next 48 hours,
+  a filterable and sortable table, and a side panel with the selected application's history.
+- **Save-to-tracker bookmarklet**: one click on any job posting opens the tracker with the offer
+  already fetched.
 - **Offer extraction**: paste a URL and the fields are prefilled. Supports jobs.ch, jobup.ch,
   LinkedIn and any site publishing a schema.org `JobPosting`, with a readable-text fallback.
   A plain-text snapshot is kept because postings disappear.
@@ -33,7 +35,8 @@ flowchart LR
 ```
 
 - **Next.js 16** (App Router, Server Actions, Cache Components), **TypeScript**, **Drizzle ORM**,
-  **zod** validation.
+  **zod** validation, **Tailwind CSS 4**. Pages are partially prerendered: the shell is static and
+  data streams in per request inside `<Suspense>`.
 - **PostgreSQL** for data; **S3-compatible object storage** for files ([RustFS](https://rustfs.com)
   locally, any S3 provider in production by changing env vars).
 - Data lives only in named Docker volumes. The database and storage sit on an internal network
@@ -82,7 +85,8 @@ make up      # build and start, then open http://127.0.0.1:3000
 
 ```bash
 make dev                # db + storage in Docker, published on 127.0.0.1 only
-npm run dev             # Next.js on the host, reads .env
+make seed               # optional: fictional demo data, only into an empty database
+npm run dev             # Next.js on http://127.0.0.1:3000 (loopback only), reads .env
 make test               # unit tests
 make test-integration   # services against real Postgres + storage (isolated test db/bucket)
 make lint               # every pre-commit check on the whole repo

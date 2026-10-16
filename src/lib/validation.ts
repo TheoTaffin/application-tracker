@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { APPLICATION_SOURCES, POSTING_LANGUAGES } from "./enums";
+import { APPLICATION_SOURCES, POSTING_LANGUAGES, STAGE_STATES } from "./enums";
 import { APPLICATION_STATUSES } from "./status";
 
 /**
@@ -131,3 +131,15 @@ export const fileLabelInput = z.object({ label: requiredText(200) });
 export const extractOfferInput = z.object({ url: httpUrl });
 
 export const idInput = z.uuid();
+
+export const stageInput = z.object({
+  name: requiredText(200),
+  state: z.enum(STAGE_STATES).default("planned"),
+  date: optionalDate,
+  note: optionalText(2_000),
+});
+export type StageInput = z.infer<typeof stageInput>;
+
+export const stageMoveInput = z.enum(["up", "down"]);
+
+export const noteInput = z.object({ body: requiredText(5_000) });

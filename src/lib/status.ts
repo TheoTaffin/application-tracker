@@ -62,11 +62,11 @@ export const STATUS_GROUP_LABEL: Record<StatusGroup, string> = {
 };
 
 /** Badge tone; the UI maps tones to colors. */
-export type StatusTone = "amber" | "blue" | "green" | "red" | "grey";
+export type StatusTone = "amber" | "green" | "red" | "grey";
 
 export const STATUS_GROUP_TONE: Record<StatusGroup, StatusTone> = {
   pending: "amber",
-  ongoing: "blue",
+  ongoing: "green",
   closed: "grey",
 };
 

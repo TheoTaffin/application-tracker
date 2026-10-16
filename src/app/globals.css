@@ -1,26 +1,103 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
+/*
+ * Design tokens, adapted from the Stitch exploration: warm sand surfaces, forest green
+ * as the primary accent, ochre / terracotta for attention, hairline borders instead of
+ * heavy shadows. Fonts come from next/font (see layout.tsx).
+ */
+@theme {
+  --font-sans: var(--font-roboto), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-jetbrains-mono), ui-monospace, monospace;
+
+  --color-sand-50: #faf8f4;
+  --color-sand-100: #f7f5f0;
+  --color-sand-150: #f2efe7;
+  --color-sand-200: #eee9de;
+  --color-sand-300: #ddd7cb;
+  --color-sand-400: #c2bcad;
+  --color-paper: #fbf9f5;
+
+  --color-forest-50: #f0f7f3;
+  --color-forest-100: #dcf0e4;
+  --color-forest-200: #bce2cc;
+  --color-forest-600: #15803d;
+  --color-forest-700: #166534;
+  --color-forest-800: #1b4332;
+  --color-forest-900: #133024;
+
+  --color-ochre-50: #fffbeb;
+  --color-ochre-100: #fef3c7;
+  --color-ochre-200: #fde68a;
+  --color-ochre-700: #b45309;
+  --color-ochre-800: #92400e;
+
+  --color-terra-50: #fef2f2;
+  --color-terra-100: #fee2e2;
+  --color-terra-200: #fecaca;
+  --color-terra-700: #c2410c;
+  --color-terra-800: #9a3412;
+
+  --color-ink: #1c1917;
+  --color-ink-muted: #44403c;
+  --color-ink-subtle: #78716c;
+  --color-ink-faint: #a8a29e;
+
+  --shadow-card:
+    0 1px 3px rgb(28 25 23 / 0.04), 0 3px 12px rgb(28 25 23 / 0.03);
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
+@layer base {
+  html {
+    color-scheme: light;
+  }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+  body {
+    @apply bg-sand-100 font-sans text-sm text-ink antialiased;
+    letter-spacing: -0.01em;
+  }
+
+  /* Dates, amounts and counters line up in columns. */
+  .tabular,
+  time,
+  table {
+    font-variant-numeric: tabular-nums;
+  }
+
+  :focus-visible {
+    @apply outline-2 outline-offset-2 outline-forest-700;
+  }
+
+  dialog::backdrop {
+    background: rgb(28 25 23 / 0.35);
+    backdrop-filter: blur(2px);
   }
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+@utility eyebrow {
+  @apply font-mono text-[10px] font-semibold tracking-widest text-ink-subtle uppercase;
+}
+
+/* Rendered markdown (form answers): readable, never styled by user content. */
+@utility prose-notes {
+  @apply space-y-2 text-[13px] leading-relaxed text-ink-muted;
+  & h1,
+  & h2,
+  & h3 {
+    @apply text-sm font-semibold text-ink;
+  }
+  & ul {
+    @apply list-disc pl-5;
+  }
+  & ol {
+    @apply list-decimal pl-5;
+  }
+  & a {
+    @apply text-forest-700 underline;
+  }
+  & code {
+    @apply rounded bg-sand-200 px-1 font-mono text-xs;
+  }
+  & blockquote {
+    @apply border-l-2 border-sand-300 pl-3;
+  }
 }

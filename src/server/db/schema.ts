@@ -18,6 +18,7 @@ import {
   APPLICATION_SOURCES,
   FILE_KINDS,
   POSTING_LANGUAGES,
+  STAGE_STATES,
   STATUS_EVENT_SOURCES,
 } from "../../lib/enums";
 import { APPLICATION_STATUSES } from "../../lib/status";
@@ -39,6 +40,7 @@ export const applicationSource = pgEnum(
   APPLICATION_SOURCES,
 );
 export const fileKind = pgEnum("file_kind", FILE_KINDS);
+export const stageState = pgEnum("stage_state", STAGE_STATES);
 
 const timestamps = {
   createdAt: timestamp({ withTimezone: true }).defaultNow().notNull(),
@@ -154,9 +156,48 @@ export const files = pgTable(
   ],
 );
 
+/**
+ * The application's own process steps, named by the user ("Portfolio deep dive",
+ * "Leadership panel"), in order. Independent from the fixed status, which drives the
+ * Pending / On-going / Closed groups.
+ */
+export const applicationStages = pgTable(
+  "application_stages",
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    applicationId: uuid()
+      .notNull()
+      .references(() => applications.id, { onDelete: "cascade" }),
+    name: text().notNull(),
+    position: integer().notNull(),
+    state: stageState().default("planned").notNull(),
+    /** When it is scheduled, or when it happened. */
+    date: date({ mode: "string" }),
+    note: text(),
+    ...timestamps,
+  },
+  (t) => [index().on(t.applicationId, t.position)],
+);
+
+/** Free-form dated notes, separate from status changes. */
+export const applicationNotes = pgTable(
+  "application_notes",
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    applicationId: uuid()
+      .notNull()
+      .references(() => applications.id, { onDelete: "cascade" }),
+    body: text().notNull(),
+    ...timestamps,
+  },
+  (t) => [index().on(t.applicationId, t.createdAt.desc())],
+);
+
 export type ApplicationRow = typeof applications.$inferSelect;
 export type NewApplicationRow = typeof applications.$inferInsert;
 export type StatusEventRow = typeof statusEvents.$inferSelect;
 export type ContactRow = typeof contacts.$inferSelect;
 export type NewContactRow = typeof contacts.$inferInsert;
 export type FileRow = typeof files.$inferSelect;
+export type StageRow = typeof applicationStages.$inferSelect;
+export type NoteRow = typeof applicationNotes.$inferSelect;

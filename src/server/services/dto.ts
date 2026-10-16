@@ -1,5 +1,11 @@
 import "server-only";
-import type { ContactRow, FileRow, StatusEventRow } from "@/server/db/schema";
+import type {
+  ContactRow,
+  FileRow,
+  NoteRow,
+  StageRow,
+  StatusEventRow,
+} from "@/server/db/schema";
 
 /**
  * Data transfer objects: the only shapes services hand to pages and actions.
@@ -58,5 +64,32 @@ export function toStatusEventDTO(row: StatusEventRow): StatusEventDTO {
     note: row.note,
     occurredAt: row.occurredAt,
     source: row.source,
+  };
+}
+
+export type StageDTO = Pick<
+  StageRow,
+  "id" | "name" | "state" | "date" | "note" | "position"
+>;
+
+export function toStageDTO(row: StageRow): StageDTO {
+  return {
+    id: row.id,
+    name: row.name,
+    state: row.state,
+    date: row.date,
+    note: row.note,
+    position: row.position,
+  };
+}
+
+export type NoteDTO = Pick<NoteRow, "id" | "body" | "createdAt" | "updatedAt">;
+
+export function toNoteDTO(row: NoteRow): NoteDTO {
+  return {
+    id: row.id,
+    body: row.body,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
   };
 }

@@ -1,5 +1,5 @@
 import "server-only";
-import { and, count, desc, eq } from "drizzle-orm";
+import { and, count, desc, eq, inArray } from "drizzle-orm";
 import type { Executor } from "@/server/db/client";
 import { applications, files, type FileRow } from "@/server/db/schema";
 import type { FileKind } from "@/lib/enums";
@@ -77,4 +77,29 @@ export async function renameFile(tx: Executor, id: string, label: string) {
 export async function deleteFile(tx: Executor, id: string) {
   const [row] = await tx.delete(files).where(eq(files.id, id)).returning();
   return row as FileRow | undefined;
+}
+
+export async function findFiles(
+  tx: Executor,
+  ids: string[],
+): Promise<FileRow[]> {
+  if (ids.length === 0) return [];
+  return tx.select().from(files).where(inArray(files.id, ids));
+}
+
+export async function listAttachmentsFor(
+  tx: Executor,
+  applicationIds: string[],
+): Promise<FileRow[]> {
+  if (applicationIds.length === 0) return [];
+  return tx
+    .select()
+    .from(files)
+    .where(
+      and(
+        eq(files.kind, "attachment"),
+        inArray(files.applicationId, applicationIds),
+      ),
+    )
+    .orderBy(desc(files.uploadedAt));
 }
