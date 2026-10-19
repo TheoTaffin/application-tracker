@@ -1,12 +1,26 @@
 "use client";
 
 import { X } from "lucide-react";
-import { useEffect, useRef, type ReactNode } from "react";
+import {
+  useEffect,
+  useId,
+  useRef,
+  useSyncExternalStore,
+  type ReactNode,
+} from "react";
+import { createPortal } from "react-dom";
 import { cx } from "@/lib/cx";
+
+const subscribeNever = () => () => {};
 
 /**
  * Modal built on the native <dialog> element: focus trapping, Escape to close and
  * inert background come from the browser.
+ *
+ * Dialogs open from anywhere, including from inside a form (e.g. "New contact"
+ * from the application form). So the dialog is portalled to <body>, keeping the
+ * DOM free of nested forms, and submit events stop at the dialog, since React
+ * bubbles them along the component tree, which would submit the outer form.
  */
 export function Dialog({
   open,
@@ -26,15 +40,24 @@ export function Dialog({
   footer?: ReactNode;
 }) {
   const ref = useRef<HTMLDialogElement>(null);
+  const titleId = useId();
+  // Portals need the document: render on the client only.
+  const isClient = useSyncExternalStore(
+    subscribeNever,
+    () => true,
+    () => false,
+  );
 
   useEffect(() => {
     const dialog = ref.current;
     if (!dialog) return;
     if (open && !dialog.open) dialog.showModal();
     if (!open && dialog.open) dialog.close();
-  }, [open]);
+  }, [open, isClient]);
 
-  return (
+  if (!isClient) return null;
+
+  return createPortal(
     <dialog
       ref={ref}
       // `cancel` and `close` also bubble up from descendants (a file input fires
@@ -48,7 +71,8 @@ export function Dialog({
         e.preventDefault();
         onClose();
       }}
-      aria-labelledby="dialog-title"
+      onSubmit={(e) => e.stopPropagation()}
+      aria-labelledby={titleId}
       className={cx(
         "m-auto max-h-[90vh] w-[calc(100%-2rem)] flex-col overflow-hidden rounded-lg border border-sand-300 bg-paper p-0 text-ink shadow-card open:flex",
         size === "lg" ? "max-w-3xl" : "max-w-lg",
@@ -56,7 +80,7 @@ export function Dialog({
     >
       <header className="flex items-start justify-between gap-4 border-b border-sand-200 bg-sand-150 px-5 py-4">
         <div>
-          <h2 id="dialog-title" className="text-base font-medium">
+          <h2 id={titleId} className="text-base font-medium">
             {title}
           </h2>
           {description && (
@@ -78,6 +102,7 @@ export function Dialog({
           {footer}
         </footer>
       )}
-    </dialog>
+    </dialog>,
+    document.body,
   );
 }

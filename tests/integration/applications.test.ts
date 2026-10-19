@@ -14,10 +14,15 @@ import {
 } from "./helpers";
 
 describe("creating an application", () => {
-  it("stores the application with its steps, first note, new contact, resume and attachments", async () => {
+  it("stores the application with its steps, first note, contact, resume and attachments", async () => {
+    const contact = await contacts.createContact({
+      name: "Anna Muster",
+      email: "anna@example.ch",
+      role: "Recruiter",
+    });
     const { id } = await applications.createApplication(
       newApplication(
-        { jobDescription: "We build data platforms." },
+        { jobDescription: "We build data platforms.", contactId: contact.id },
         {
           steps: [
             applied,
@@ -30,11 +35,6 @@ describe("creating an application", () => {
             },
           ],
           note: "Referred by a former colleague",
-          newContact: {
-            name: "Anna Muster",
-            email: "anna@example.ch",
-            role: "Recruiter",
-          },
           extracted: { role: "Senior Data Engineer", source: "jobs_ch" },
         },
       ),

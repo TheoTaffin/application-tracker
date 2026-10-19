@@ -376,7 +376,7 @@ export async function createApplication(
   input: unknown,
   files: CreateApplicationFiles = {},
 ): Promise<{ id: string }> {
-  const { application, steps, note, newContact, extracted } = parseInput(
+  const { application, steps, note, extracted } = parseInput(
     newApplicationInput,
     input,
   );
@@ -387,12 +387,8 @@ export async function createApplication(
   let id: string | undefined;
   try {
     id = await db().transaction(async (tx) => {
-      const contactId = newContact
-        ? (await contactsRepo.insertContact(tx, newContact)).id
-        : application.contactId;
       const values = {
         ...application,
-        contactId,
         resumeId: uploadedResume?.id ?? application.resumeId,
         offerExtracted: extracted ?? null,
       };

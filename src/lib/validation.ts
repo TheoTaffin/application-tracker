@@ -131,8 +131,6 @@ export const newApplicationInput = z.object({
     }),
   /** First entry of the notes log. */
   note: optionalText(5_000),
-  /** Create a contact inline instead of picking an existing one. */
-  newContact: contactInput.nullish(),
 });
 export type NewApplicationInput = z.input<typeof newApplicationInput>;
 
