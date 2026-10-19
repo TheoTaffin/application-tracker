@@ -105,7 +105,6 @@ export function DashboardWorkspace({ workspace }: { workspace: Workspace }) {
         items={followUps}
         today={dashboard.today}
         hours={FOLLOW_UP_HORIZON_DAYS * 24}
-        onSelect={select}
       />
       <div className="flex flex-col items-stretch gap-6 xl:flex-row xl:items-start">
         <ApplicationsTable

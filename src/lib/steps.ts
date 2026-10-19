@@ -1,13 +1,39 @@
 import type { StepState } from "./enums";
-import { STATUS_LABEL, type ApplicationStatus } from "./status";
+import {
+  APPLICATION_STATUSES,
+  STATUS_LABEL,
+  type ApplicationStatus,
+} from "./status";
 
 /**
  * Rules of the steps timeline, shared by server (summaries, follow-ups) and client
  * (timeline display). Nothing here is stored: everything derives from the steps.
+ *
+ * A step is either a status change (Applied, Interview 1…), which moves the
+ * application forward, or an action (Reach out…), which happens without changing
+ * the status.
  */
 
+export const STEP_ACTIONS = ["reach_out"] as const;
+export type StepAction = (typeof STEP_ACTIONS)[number];
+
+export const STEP_KINDS = [...APPLICATION_STATUSES, ...STEP_ACTIONS] as const;
+export type StepKind = (typeof STEP_KINDS)[number];
+
+export const STEP_ACTION_LABEL: Record<StepAction, string> = {
+  reach_out: "Reach out",
+};
+
+export function isStatusKind(kind: StepKind): kind is ApplicationStatus {
+  return (APPLICATION_STATUSES as readonly string[]).includes(kind);
+}
+
+export function kindLabel(kind: StepKind): string {
+  return isStatusKind(kind) ? STATUS_LABEL[kind] : STEP_ACTION_LABEL[kind];
+}
+
 export interface StepLike {
-  status: ApplicationStatus;
+  kind: StepKind;
   title: string | null;
   state: StepState;
   /** YYYY-MM-DD; may be null for planned or cancelled steps. */
@@ -31,27 +57,32 @@ export function sortSteps<T extends StepLike>(steps: readonly T[]): T[] {
   return [...steps].sort(compareSteps);
 }
 
-/** The latest step that happened: it defines the application's current status. */
+/** Does this step define the status? Only status changes that happened do. */
+export function setsStatus(step: Pick<StepLike, "kind" | "state">): boolean {
+  return step.state === "done" && isStatusKind(step.kind);
+}
+
+/** The latest status change that happened: it defines the application's status. */
 export function currentStep<T extends StepLike>(
   steps: readonly T[],
 ): T | undefined {
-  return sortSteps(steps.filter((s) => s.state === "done")).at(-1);
+  return sortSteps(steps.filter(setsStatus)).at(-1);
 }
 
-/** The earliest upcoming step: the application's next action. */
+/** The earliest upcoming step (status change or action): what to do next. */
 export function nextStep<T extends StepLike>(
   steps: readonly T[],
 ): T | undefined {
   return sortSteps(steps.filter((s) => s.state === "planned"))[0];
 }
 
-/** When I applied: the first "applied" step, else the first step that happened. */
+/** When I applied: the first "applied" step, else the first status change. */
 export function appliedDate(steps: readonly StepLike[]): string | null {
-  const done = sortSteps(steps.filter((s) => s.state === "done"));
-  return (done.find((s) => s.status === "applied") ?? done[0])?.date ?? null;
+  const done = sortSteps(steps.filter(setsStatus));
+  return (done.find((s) => s.kind === "applied") ?? done[0])?.date ?? null;
 }
 
-/** A step's display name: its own title, or its status. */
-export function stepLabel(step: Pick<StepLike, "status" | "title">): string {
-  return step.title || STATUS_LABEL[step.status];
+/** A step's display name: its own title, or its kind. */
+export function stepLabel(step: Pick<StepLike, "kind" | "title">): string {
+  return step.title || kindLabel(step.kind);
 }

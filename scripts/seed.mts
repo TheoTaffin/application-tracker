@@ -24,8 +24,8 @@ const day = (offset: number) => {
   return d.toISOString().slice(0, 10);
 };
 
-/** [status, days from today (negative = past), state, title?, note?] */
-type Step = [status: string, inDays: number | null, state: "done" | "planned" | "cancelled", title?: string, note?: string];
+/** [kind (status change or action), days from today (negative = past), state, title?, note?] */
+type Step = [kind: string, inDays: number | null, state: "done" | "planned" | "cancelled", title?: string, note?: string];
 
 interface Demo {
   company: string;
@@ -62,7 +62,7 @@ const demos: Demo[] = [
       ["acknowledged", -22, "done", undefined, "Automatic confirmation"],
       ["screening", -15, "done", "Recruiter screen", "30 min call with Lena, went well"],
       ["interview_1", -2, "done", "Technical round", "Live SQL + pipeline design with the platform lead"],
-      ["interview_1", 0, "planned", "Send thank-you note"],
+      ["reach_out", 0, "planned", "Send a thank-you note"],
       ["interview_2plus", 6, "planned", "Team fit & leadership"],
     ],
     notes: [
@@ -113,7 +113,7 @@ const demos: Demo[] = [
     source: "company_site",
     steps: [
       ["applied", -6, "done"],
-      ["applied", -1, "planned", "Follow up: no answer after one week"],
+      ["reach_out", -1, "planned", "Ping the recruiter: no answer after one week"],
     ],
   },
   {
@@ -195,10 +195,10 @@ for (const d of demos) {
       d.formAnswers ?? null,
     ],
   );
-  for (const [status, inDays, state, title, note] of d.steps) {
+  for (const [kind, inDays, state, title, note] of d.steps) {
     await client.query(
-      "INSERT INTO application_steps (application_id, status, state, date, title, note) VALUES ($1, $2, $3, $4, $5, $6)",
-      [app.rows[0].id, status, state, inDays === null ? null : day(inDays), title ?? null, note ?? null],
+      "INSERT INTO application_steps (application_id, kind, state, date, title, note) VALUES ($1, $2, $3, $4, $5, $6)",
+      [app.rows[0].id, kind, state, inDays === null ? null : day(inDays), title ?? null, note ?? null],
     );
   }
   for (const body of d.notes ?? []) {

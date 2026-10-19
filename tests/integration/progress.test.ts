@@ -7,6 +7,7 @@ import {
   NotFoundError,
 } from "@/server/services/errors";
 import * as progress from "@/server/services/progress-service";
+import { todayInAppTimeZone } from "@/lib/dates";
 import { newApplication, pdfFile, pngFile } from "./helpers";
 
 async function create(company = "Example Bank AG") {
@@ -17,25 +18,25 @@ describe("steps", () => {
   it("derives the current status and next step as steps are added", async () => {
     const id = await create();
     await progress.addStep(id, {
-      status: "interview_1",
+      kind: "interview_1",
       title: "Technical round",
       date: "2026-10-20",
     });
     // Recorded later but happened earlier: must not become the current status.
-    await progress.addStep(id, { status: "acknowledged", date: "2026-10-12" });
+    await progress.addStep(id, { kind: "acknowledged", date: "2026-10-12" });
     await progress.addStep(id, {
-      status: "interview_2plus",
+      kind: "interview_2plus",
       state: "planned",
       date: "2026-10-28",
     });
-    await progress.addStep(id, { status: "offer", state: "planned" });
+    await progress.addStep(id, { kind: "offer", state: "planned" });
 
     const detail = (await applications.getApplication(id))!;
     expect(detail.status).toBe("interview_1");
     expect(detail.statusGroup).toBe("ongoing");
     expect(detail.currentStep?.title).toBe("Technical round");
-    expect(detail.nextStep?.status).toBe("interview_2plus");
-    expect(detail.steps.map((s) => s.status)).toEqual([
+    expect(detail.nextStep?.kind).toBe("interview_2plus");
+    expect(detail.steps.map((s) => s.kind)).toEqual([
       "applied",
       "acknowledged",
       "interview_1",
@@ -47,12 +48,12 @@ describe("steps", () => {
   it("turns a planned step into a done one, moving the status forward", async () => {
     const id = await create();
     const planned = await progress.addStep(id, {
-      status: "screening",
+      kind: "screening",
       state: "planned",
       date: "2026-10-15",
     });
     await progress.updateStep(planned.id, {
-      status: "screening",
+      kind: "screening",
       state: "done",
       date: "2026-10-15",
       note: "Went well",
@@ -71,30 +72,75 @@ describe("steps", () => {
     );
     await expect(
       progress.updateStep(only.id, {
-        status: "applied",
+        kind: "applied",
         state: "planned",
         date: "2026-10-10",
       }),
     ).rejects.toBeInstanceOf(ConflictError);
 
-    await progress.addStep(id, { status: "acknowledged", date: "2026-10-11" });
+    await progress.addStep(id, { kind: "acknowledged", date: "2026-10-11" });
     await progress.deleteStep(only.id);
     expect((await applications.getApplication(id))!.status).toBe(
       "acknowledged",
     );
   });
 
+  it("marks a planned step as done today", async () => {
+    const id = await create();
+    const planned = await progress.addStep(id, {
+      kind: "screening",
+      title: "Call with HR",
+      state: "planned",
+      date: "2026-10-30",
+    });
+    const done = await progress.completeStep(planned.id);
+    expect(done).toMatchObject({
+      state: "done",
+      date: todayInAppTimeZone(),
+      title: "Call with HR",
+    });
+    expect((await applications.getApplication(id))!.status).toBe("screening");
+  });
+
+  it("records reach-outs without changing the status", async () => {
+    const id = await create();
+    await progress.addStep(id, { kind: "acknowledged", date: "2026-10-12" });
+    await progress.addStep(id, {
+      kind: "reach_out",
+      title: "Pinged the recruiter",
+      date: "2026-10-19",
+    });
+    const ping = await progress.addStep(id, {
+      kind: "reach_out",
+      state: "planned",
+      date: "2026-10-26",
+    });
+
+    const detail = (await applications.getApplication(id))!;
+    expect(detail.status).toBe("acknowledged");
+    expect(detail.nextStep?.id).toBe(ping.id);
+  });
+
+  it("does not count actions as the status-defining step", async () => {
+    const id = await create();
+    const [applied] = (await applications.getApplication(id))!.steps;
+    await progress.addStep(id, { kind: "reach_out", date: "2026-10-11" });
+    await expect(progress.deleteStep(applied.id)).rejects.toBeInstanceOf(
+      ConflictError,
+    );
+  });
+
   it("validates input and unknown ids", async () => {
     const id = await create();
+    await expect(progress.addStep(id, { kind: "done" })).rejects.toBeInstanceOf(
+      InvalidInputError,
+    );
     await expect(
-      progress.addStep(id, { status: "done" }),
-    ).rejects.toBeInstanceOf(InvalidInputError);
-    await expect(
-      progress.addStep(id, { status: "screening", state: "done" }),
+      progress.addStep(id, { kind: "screening", state: "done" }),
     ).rejects.toBeInstanceOf(InvalidInputError);
     await expect(
       progress.updateStep("00000000-0000-4000-8000-000000000000", {
-        status: "offer",
+        kind: "offer",
         state: "planned",
       }),
     ).rejects.toBeInstanceOf(NotFoundError);
@@ -141,13 +187,13 @@ describe("workspace", () => {
       { resumeFile: pdfFile(), attachments: [pngFile()] },
     );
     await progress.addStep(id, {
-      status: "interview_1",
+      kind: "interview_1",
       title: "Technical round",
       state: "planned",
       date: "2026-11-02",
     });
     const other = await create("Other AG");
-    await progress.addStep(other, { status: "rejected", date: "2026-10-20" });
+    await progress.addStep(other, { kind: "rejected", date: "2026-10-20" });
 
     const workspace = await applications.getWorkspace();
     expect(workspace.applications).toHaveLength(2);

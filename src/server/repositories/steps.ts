@@ -1,5 +1,6 @@
 import "server-only";
 import { and, asc, count, eq, inArray, ne } from "drizzle-orm";
+import { APPLICATION_STATUSES } from "@/lib/status";
 import type { Executor } from "@/server/db/client";
 import { applicationSteps, type StepRow } from "@/server/db/schema";
 import type { StepInput } from "@/lib/validation";
@@ -58,8 +59,8 @@ export async function deleteStep(tx: Executor, id: string) {
   return row as StepRow | undefined;
 }
 
-/** Done steps of an application other than `exceptId`. */
-export async function countOtherDoneSteps(
+/** Done status changes of an application other than `exceptId` (see lib/steps). */
+export async function countOtherStatusSteps(
   tx: Executor,
   applicationId: string,
   exceptId: string,
@@ -71,6 +72,7 @@ export async function countOtherDoneSteps(
       and(
         eq(applicationSteps.applicationId, applicationId),
         eq(applicationSteps.state, "done"),
+        inArray(applicationSteps.kind, [...APPLICATION_STATUSES]),
         ne(applicationSteps.id, exceptId),
       ),
     );

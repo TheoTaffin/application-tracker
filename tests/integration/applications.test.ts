@@ -21,9 +21,9 @@ describe("creating an application", () => {
         {
           steps: [
             applied,
-            { status: "acknowledged", state: "done", date: "2026-10-12" },
+            { kind: "acknowledged", state: "done", date: "2026-10-12" },
             {
-              status: "screening",
+              kind: "screening",
               title: "Call with HR",
               state: "planned",
               date: "2026-10-20",
@@ -55,9 +55,9 @@ describe("creating an application", () => {
       appliedAt: "2026-10-10",
       status: "acknowledged",
       statusGroup: "pending",
-      currentStep: { status: "acknowledged", date: "2026-10-12" },
+      currentStep: { kind: "acknowledged", date: "2026-10-12" },
       nextStep: {
-        status: "screening",
+        kind: "screening",
         title: "Call with HR",
         state: "planned",
       },
@@ -65,7 +65,7 @@ describe("creating an application", () => {
       contact: { name: "Anna Muster", email: "anna@example.ch" },
       resume: { label: "CV_EN_v3", kind: "resume", mime: "application/pdf" },
     });
-    expect(detail!.steps.map((s) => s.status)).toEqual([
+    expect(detail!.steps.map((s) => s.kind)).toEqual([
       "applied",
       "acknowledged",
       "screening",
@@ -89,7 +89,7 @@ describe("creating an application", () => {
       .createApplication(
         newApplication(
           { company: " ", workloadMin: "90", workloadMax: "60" },
-          { steps: [{ status: "applied", state: "done", date: "" }] },
+          { steps: [{ kind: "applied", state: "done", date: "" }] },
         ),
       )
       .catch((e) => e);
@@ -110,7 +110,7 @@ describe("creating an application", () => {
           {},
           {
             steps: [
-              { status: "interview_1", state: "planned", date: "2026-11-01" },
+              { kind: "interview_1", state: "planned", date: "2026-11-01" },
             ],
           },
         ),
@@ -118,6 +118,18 @@ describe("creating an application", () => {
       .catch((e) => e);
     expect(error).toBeInstanceOf(InvalidInputError);
     expect(error.fieldErrors.steps).toBeDefined();
+  });
+
+  it("does not accept actions alone as the steps so far", async () => {
+    const error = await applications
+      .createApplication(
+        newApplication(
+          {},
+          { steps: [{ kind: "reach_out", state: "done", date: "2026-10-10" }] },
+        ),
+      )
+      .catch((e) => e);
+    expect(error).toBeInstanceOf(InvalidInputError);
   });
 
   it("rejects a resume id that points at an attachment", async () => {
@@ -147,7 +159,7 @@ describe("creating an application", () => {
 describe("listing and dashboard", () => {
   it("counts by group and lists follow-ups from planned steps, excluding closed ones", async () => {
     const plan = (date: string) => ({
-      status: "applied",
+      kind: "applied",
       title: "Follow up",
       state: "planned",
       date,
@@ -176,7 +188,7 @@ describe("listing and dashboard", () => {
         {
           steps: [
             applied,
-            { status: "rejected", state: "done", date: "2026-10-12" },
+            { kind: "rejected", state: "done", date: "2026-10-12" },
             plan("2026-10-01"),
           ],
         },

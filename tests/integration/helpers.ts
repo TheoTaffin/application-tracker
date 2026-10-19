@@ -40,7 +40,7 @@ export const baseApplication = {
 };
 
 /** The usual first step: applied, done, on a fixed date. */
-export const applied = { status: "applied", state: "done", date: "2026-10-10" };
+export const applied = { kind: "applied", state: "done", date: "2026-10-10" };
 
 /** Create input with the minimal valid steps. */
 export function newApplication(

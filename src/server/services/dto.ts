@@ -59,13 +59,13 @@ export function toNoteDTO(row: NoteRow): NoteDTO {
 
 export type StepDTO = Pick<
   StepRow,
-  "id" | "status" | "title" | "state" | "date" | "note" | "source" | "createdAt"
+  "id" | "kind" | "title" | "state" | "date" | "note" | "source" | "createdAt"
 >;
 
 export function toStepDTO(row: StepRow): StepDTO {
   return {
     id: row.id,
-    status: row.status,
+    kind: row.kind,
     title: row.title,
     state: row.state,
     date: row.date,

@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { APPLICATION_SOURCES, POSTING_LANGUAGES, STEP_STATES } from "./enums";
-import { APPLICATION_STATUSES } from "./status";
+import { setsStatus, STEP_KINDS } from "./steps";
 
 /**
  * Input schemas, shared by server actions (authoritative) and UI forms (early feedback).
@@ -103,7 +103,8 @@ export const extractedOfferInput = z
 /** One step of the timeline: something that happened (done) or is coming (planned). */
 export const stepInput = z
   .object({
-    status: z.enum(APPLICATION_STATUSES),
+    /** A status change (applied, interview_1…) or an action (reach_out). */
+    kind: z.enum(STEP_KINDS),
     /** Optional name of its own, e.g. "Technical round with Lukas". */
     title: optionalText(200),
     state: z.enum(STEP_STATES).default("done"),
@@ -124,8 +125,9 @@ export const newApplicationInput = z.object({
     .array(stepInput)
     .min(1)
     .max(50)
-    .refine((steps) => steps.some((s) => s.state === "done"), {
-      message: "Add at least one step that already happened (e.g. Applied)",
+    .refine((steps) => steps.some(setsStatus), {
+      message:
+        "Add at least one status change that already happened (e.g. Applied)",
     }),
   /** First entry of the notes log. */
   note: optionalText(5_000),

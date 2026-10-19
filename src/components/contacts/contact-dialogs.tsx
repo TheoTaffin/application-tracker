@@ -4,24 +4,19 @@ import { Loader2, Pencil, Plus, Trash2 } from "lucide-react";
 import { useState, useTransition } from "react";
 import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
-import { Field, FormError, Input, Textarea } from "@/components/ui/field";
+import { FormError } from "@/components/ui/field";
 import {
   createContactAction,
   deleteContactAction,
   updateContactAction,
 } from "@/server/actions/contacts";
 import type { ContactDTO } from "@/server/services/dto";
-
-type Values = Omit<ContactDTO, "id">;
-const empty: Values = {
-  name: "",
-  email: "",
-  phone: "",
-  company: "",
-  role: "",
-  linkedinUrl: "",
-  notes: "",
-};
+import {
+  contactErrors,
+  ContactFields,
+  contactValues,
+  type ContactValues,
+} from "./contact-fields";
 
 function ContactForm({
   contact,
@@ -30,17 +25,12 @@ function ContactForm({
   contact?: ContactDTO;
   onDone: () => void;
 }) {
-  const [values, setValues] = useState<Values>(() => ({
-    ...empty,
-    ...contact,
-  }));
+  const [values, setValues] = useState<ContactValues>(() =>
+    contactValues(contact),
+  );
   const [error, setError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string[]>>({});
   const [pending, start] = useTransition();
-  const set =
-    (key: keyof Values) =>
-    (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
-      setValues((v) => ({ ...v, [key]: e.target.value }));
 
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -57,23 +47,6 @@ function ContactForm({
     });
   };
 
-  const text = (
-    key: keyof Values,
-    label: string,
-    props: React.ComponentProps<"input"> = {},
-  ) => (
-    <Field label={label} error={fieldErrors[key]}>
-      {(p) => (
-        <Input
-          {...p}
-          {...props}
-          value={values[key] ?? ""}
-          onChange={set(key)}
-        />
-      )}
-    </Field>
-  );
-
   return (
     <form
       onSubmit={submit}
@@ -83,22 +56,13 @@ function ContactForm({
       <div className="sm:col-span-2">
         <FormError message={error} />
       </div>
-      {text("name", "Name", { required: true })}
-      {text("role", "Role", { placeholder: "Recruiter, Hiring manager…" })}
-      {text("company", "Company")}
-      {text("email", "Email", { type: "email" })}
-      {text("phone", "Phone", { type: "tel" })}
-      {text("linkedinUrl", "LinkedIn URL", { type: "url" })}
-      <Field label="Notes" className="sm:col-span-2" error={fieldErrors.notes}>
-        {(p) => (
-          <Textarea
-            {...p}
-            rows={3}
-            value={values.notes ?? ""}
-            onChange={set("notes")}
-          />
-        )}
-      </Field>
+      <div className="sm:col-span-2">
+        <ContactFields
+          values={values}
+          onChange={setValues}
+          errors={contactErrors(fieldErrors)}
+        />
+      </div>
       <div className="flex justify-end gap-2 sm:col-span-2">
         <Button onClick={onDone}>Cancel</Button>
         <Button type="submit" variant="primary" disabled={pending}>

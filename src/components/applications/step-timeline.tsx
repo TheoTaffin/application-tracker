@@ -1,17 +1,23 @@
 "use client";
 
-import { Check, Loader2, Mail, Plus, Trash2, X } from "lucide-react";
+import { Check, Loader2, Mail, Pencil, Plus, Trash2, X } from "lucide-react";
 import { useState, useTransition } from "react";
-import { StatusBadge } from "@/components/ui/badge";
+import { StepKindBadge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
 import { FormError } from "@/components/ui/field";
 import { cx } from "@/lib/cx";
 import { formatDate } from "@/lib/format";
-import { currentStep, nextStep, sortSteps, stepLabel } from "@/lib/steps";
-import type { ApplicationStatus } from "@/lib/status";
+import {
+  currentStep,
+  nextStep,
+  sortSteps,
+  stepLabel,
+  type StepKind,
+} from "@/lib/steps";
 import {
   addStepAction,
+  completeStepAction,
   deleteStepAction,
   updateStepAction,
 } from "@/server/actions/progress";
@@ -20,7 +26,7 @@ import { emptyStep, StepFields, type StepValues } from "./step-fields";
 
 function toValues(step: StepDTO): StepValues {
   return {
-    status: step.status,
+    kind: step.kind,
     title: step.title ?? "",
     state: step.state,
     date: step.date ?? "",
@@ -32,18 +38,18 @@ function toValues(step: StepDTO): StepValues {
 function StepDialog({
   applicationId,
   step,
-  defaultStatus,
+  defaultKind,
   open,
   onClose,
 }: {
   applicationId: string;
   step?: StepDTO;
-  defaultStatus?: ApplicationStatus;
+  defaultKind?: StepKind;
   open: boolean;
   onClose: () => void;
 }) {
   const [values, setValues] = useState<StepValues>(() =>
-    step ? toValues(step) : emptyStep(defaultStatus),
+    step ? toValues(step) : emptyStep(defaultKind),
   );
   const [error, setError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string[]>>({});
@@ -112,13 +118,13 @@ function StepDialog({
 /** Opens the "add a step" dialog; used in the side panel and on follow-up cards. */
 export function AddStepButton({
   applicationId,
-  defaultStatus,
+  defaultKind,
   variant = "secondary",
   className,
   label = "Add step",
 }: {
   applicationId: string;
-  defaultStatus?: ApplicationStatus;
+  defaultKind?: StepKind;
   variant?: "secondary" | "primary" | "ghost";
   className?: string;
   label?: string;
@@ -136,7 +142,80 @@ export function AddStepButton({
       {open && (
         <StepDialog
           applicationId={applicationId}
-          defaultStatus={defaultStatus}
+          defaultKind={defaultKind}
+          open
+          onClose={() => setOpen(false)}
+        />
+      )}
+    </>
+  );
+}
+
+/** Completes a planned step today: how a planned step gets validated. */
+export function MarkDoneButton({
+  stepId,
+  variant = "secondary",
+  className,
+}: {
+  stepId: string;
+  variant?: "secondary" | "primary" | "ghost";
+  className?: string;
+}) {
+  const [pending, start] = useTransition();
+  const [error, setError] = useState<string | null>(null);
+  return (
+    <>
+      <Button
+        variant={variant}
+        size="sm"
+        className={className}
+        disabled={pending}
+        onClick={() =>
+          start(async () => {
+            const result = await completeStepAction(stepId);
+            setError(result.ok ? null : result.error);
+          })
+        }
+      >
+        {pending ? (
+          <Loader2 className="size-3.5 animate-spin" />
+        ) : (
+          <Check className="size-3.5" />
+        )}
+        Mark done
+      </Button>
+      {error && <FormError message={error} />}
+    </>
+  );
+}
+
+/** Opens the edit dialog of one step (e.g. to reschedule a planned step). */
+export function EditStepButton({
+  applicationId,
+  step,
+  variant = "ghost",
+  className,
+}: {
+  applicationId: string;
+  step: StepDTO;
+  variant?: "secondary" | "primary" | "ghost";
+  className?: string;
+}) {
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      <Button
+        variant={variant}
+        size="sm"
+        className={className}
+        onClick={() => setOpen(true)}
+      >
+        <Pencil className="size-3.5" /> Edit
+      </Button>
+      {open && (
+        <StepDialog
+          applicationId={applicationId}
+          step={step}
           open
           onClose={() => setOpen(false)}
         />
@@ -200,7 +279,7 @@ export function StepTimeline({
           </span>
           <AddStepButton
             applicationId={applicationId}
-            defaultStatus={current?.status}
+            defaultKind={current?.kind}
             variant="ghost"
             className="h-7 px-2"
             label={compact ? "" : "Add step"}
@@ -231,7 +310,7 @@ export function StepTimeline({
               >
                 <div className="flex items-start justify-between gap-2">
                   <span className="flex min-w-0 flex-wrap items-center gap-1.5">
-                    <StatusBadge status={step.status} />
+                    <StepKindBadge kind={step.kind} />
                     {step.title && (
                       <span
                         className={cx(
@@ -271,6 +350,12 @@ export function StepTimeline({
                   </p>
                 )}
               </button>
+              {step.state === "planned" && (
+                <MarkDoneButton
+                  stepId={step.id}
+                  className="mt-1.5 h-6 px-2 text-[11px]"
+                />
+              )}
             </li>
           );
         })}

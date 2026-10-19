@@ -29,11 +29,11 @@ import {
   relativeDay,
   SOURCE_LABEL,
 } from "@/lib/format";
+import { todayInAppTimeZone } from "@/lib/dates";
 import { stepLabel } from "@/lib/steps";
 import {
   getApplication,
   getFormOptions,
-  todayInAppTimeZone,
   type ApplicationDetail,
 } from "@/server/services/application-service";
 

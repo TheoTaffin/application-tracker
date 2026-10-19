@@ -1,12 +1,15 @@
 "use client";
 
 import { BellRing } from "lucide-react";
-import { AddStepButton } from "@/components/applications/step-timeline";
-import { StatusBadge } from "@/components/ui/badge";
+import Link from "next/link";
+import {
+  EditStepButton,
+  MarkDoneButton,
+} from "@/components/applications/step-timeline";
+import { StatusBadge, StepKindBadge } from "@/components/ui/badge";
 import { Card, CardHeader } from "@/components/ui/card";
 import { cx } from "@/lib/cx";
 import { relativeDay } from "@/lib/format";
-import { stepLabel } from "@/lib/steps";
 import type { WorkspaceApplication } from "@/server/services/application-service";
 
 const chip = {
@@ -16,16 +19,15 @@ const chip = {
   later: "border-sand-300 bg-sand-100 text-ink-muted",
 };
 
+/** Planned steps that are overdue or due soon: open the application, or act on the step. */
 export function FollowUps({
   items,
   today,
   hours,
-  onSelect,
 }: {
   items: WorkspaceApplication[];
   today: string;
   hours: number;
-  onSelect: (id: string) => void;
 }) {
   if (items.length === 0) return null;
 
@@ -34,7 +36,7 @@ export function FollowUps({
       <CardHeader
         icon={<BellRing className="size-[18px] text-terra-700" />}
         title="Upcoming follow-ups"
-        description={`Overdue and due in the next ${hours} hours.`}
+        description={`Planned steps overdue or due in the next ${hours} hours.`}
         actions={
           <span className="font-mono text-xs text-ink-subtle">
             {items.length} {items.length === 1 ? "item" : "items"}
@@ -48,13 +50,9 @@ export function FollowUps({
           return (
             <li
               key={a.id}
-              className="flex flex-col justify-between rounded-lg border border-sand-300 bg-white p-4 shadow-sm transition-colors hover:border-sand-400"
+              className="flex flex-col justify-between rounded-lg border border-sand-300 bg-white shadow-sm transition-colors hover:border-sand-400"
             >
-              <button
-                type="button"
-                onClick={() => onSelect(a.id)}
-                className="text-left"
-              >
+              <Link href={`/applications/${a.id}`} className="block p-4 pb-0">
                 <div className="mb-2 flex items-center justify-between gap-2">
                   <span
                     className={cx(
@@ -66,31 +64,34 @@ export function FollowUps({
                   </span>
                   <StatusBadge status={a.status} />
                 </div>
-                <h3 className="text-base font-semibold">{a.company}</h3>
+                <h3 className="text-base font-semibold hover:underline">
+                  {a.company}
+                </h3>
                 <p className="mt-0.5 text-xs text-ink-muted">{a.role}</p>
-                {next && (
-                  <p className="mt-3 border-t border-sand-200 pt-2.5 text-xs leading-relaxed text-ink">
-                    {stepLabel(next)}
-                    {next.note && (
-                      <span className="mt-1 block text-ink-muted">
-                        {next.note}
-                      </span>
+                <div className="mt-3 border-t border-sand-200 pt-2.5 text-xs leading-relaxed">
+                  <span className="flex flex-wrap items-center gap-1.5">
+                    <StepKindBadge kind={next.kind} />
+                    {next.title && (
+                      <span className="font-medium text-ink">{next.title}</span>
                     )}
-                  </p>
-                )}
-              </button>
-              <div className="mt-4 flex items-center justify-between border-t border-sand-200 pt-2.5">
-                <span className="text-[11px] text-ink-subtle">
+                  </span>
+                  {next.note && (
+                    <span className="mt-1 block text-ink-muted">
+                      {next.note}
+                    </span>
+                  )}
+                </div>
+              </Link>
+              <div className="mt-3 flex items-center justify-between gap-2 border-t border-sand-200 px-4 py-2.5">
+                <span className="truncate text-[11px] text-ink-subtle">
                   {a.contactName
                     ? `Contact: ${a.contactName}`
                     : "No contact yet"}
                 </span>
-                <AddStepButton
-                  applicationId={a.id}
-                  defaultStatus={a.status}
-                  variant="ghost"
-                  className="h-7 px-2 text-terra-700"
-                />
+                <span className="flex shrink-0 items-center gap-1">
+                  <EditStepButton applicationId={a.id} step={next} />
+                  <MarkDoneButton stepId={next.id} variant="primary" />
+                </span>
               </div>
             </li>
           );

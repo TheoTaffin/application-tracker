@@ -2,14 +2,12 @@
 
 import { Field, Input, Select, Textarea } from "@/components/ui/field";
 import { STEP_STATES, type StepState } from "@/lib/enums";
-import {
-  APPLICATION_STATUSES,
-  STATUS_LABEL,
-  type ApplicationStatus,
-} from "@/lib/status";
+import { todayInAppTimeZone } from "@/lib/dates";
+import { APPLICATION_STATUSES, STATUS_LABEL } from "@/lib/status";
+import { STEP_ACTION_LABEL, STEP_ACTIONS, type StepKind } from "@/lib/steps";
 
 export interface StepValues {
-  status: ApplicationStatus;
+  kind: StepKind;
   title: string;
   state: StepState;
   date: string;
@@ -22,14 +20,14 @@ export const STEP_STATE_LABEL: Record<StepState, string> = {
   cancelled: "Cancelled",
 };
 
-export function todayInZurich() {
-  return new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Zurich" }).format(
-    new Date(),
-  );
-}
-
-export function emptyStep(status: ApplicationStatus = "applied"): StepValues {
-  return { status, title: "", state: "done", date: todayInZurich(), note: "" };
+export function emptyStep(kind: StepKind = "applied"): StepValues {
+  return {
+    kind,
+    title: "",
+    state: "done",
+    date: todayInAppTimeZone(),
+    note: "",
+  };
 }
 
 /** The fields of one step, shared by the step dialog and the new-application form. */
@@ -41,7 +39,7 @@ export function StepFields({
 }: {
   values: StepValues;
   onChange: (values: StepValues) => void;
-  /** Keyed by field name (status, title, state, date, note). */
+  /** Keyed by field name (kind, title, state, date, note). */
   errors?: Record<string, string[] | undefined>;
   withNote?: boolean;
 }) {
@@ -50,18 +48,27 @@ export function StepFields({
 
   return (
     <div className="grid grid-cols-2 gap-2 sm:grid-cols-[1.1fr_1.6fr_0.9fr_1fr]">
-      <Field label="Status" error={errors.status}>
+      <Field label="Step" error={errors.kind}>
         {(p) => (
           <Select
             {...p}
-            value={values.status}
-            onChange={(e) => set("status", e.target.value as ApplicationStatus)}
+            value={values.kind}
+            onChange={(e) => set("kind", e.target.value as StepKind)}
           >
-            {APPLICATION_STATUSES.map((s) => (
-              <option key={s} value={s}>
-                {STATUS_LABEL[s]}
-              </option>
-            ))}
+            <optgroup label="Status change">
+              {APPLICATION_STATUSES.map((s) => (
+                <option key={s} value={s}>
+                  {STATUS_LABEL[s]}
+                </option>
+              ))}
+            </optgroup>
+            <optgroup label="Action (keeps the status)">
+              {STEP_ACTIONS.map((a) => (
+                <option key={a} value={a}>
+                  {STEP_ACTION_LABEL[a]}
+                </option>
+              ))}
+            </optgroup>
           </Select>
         )}
       </Field>
@@ -69,7 +76,11 @@ export function StepFields({
         {(p) => (
           <Input
             {...p}
-            placeholder="Technical round with Lukas…"
+            placeholder={
+              values.kind === "reach_out"
+                ? "Ping the recruiter…"
+                : "Technical round with Lukas…"
+            }
             value={values.title}
             onChange={(e) => set("title", e.target.value)}
           />

@@ -27,6 +27,12 @@ import type {
 } from "@/server/extraction/types";
 import type { FormOptions } from "@/server/services/application-service";
 import { emptyStep, StepFields, type StepValues } from "./step-fields";
+import {
+  contactErrors,
+  ContactFields,
+  contactValues,
+  type ContactValues,
+} from "@/components/contacts/contact-fields";
 
 export interface ApplicationValues {
   offerUrl: string;
@@ -116,11 +122,9 @@ export function ApplicationForm({
     emptyStep("applied"),
   ]);
   const [note, setNote] = useState("");
-  const [newContact, setNewContact] = useState({
-    name: "",
-    email: "",
-    role: "",
-  });
+  const [newContact, setNewContact] = useState<ContactValues>(() =>
+    contactValues(),
+  );
   const [resumeFile, setResumeFile] = useState<File | null>(null);
   const [attachments, setAttachments] = useState<File[]>([]);
   const [extraction, setExtraction] = useState<ExtractionResult | null>(null);
@@ -135,9 +139,7 @@ export function ApplicationForm({
     value: ApplicationValues[K],
   ) => setValues((v) => ({ ...v, [key]: value }));
   const err = (key: string) =>
-    fieldErrors[key] ??
-    fieldErrors[`application.${key}`] ??
-    fieldErrors[`newContact.${key}`];
+    fieldErrors[key] ?? fieldErrors[`application.${key}`];
 
   const extract = (url = values.offerUrl) => {
     if (!url) return;
@@ -455,7 +457,7 @@ export function ApplicationForm({
                     setSteps((all) => all.map((s, j) => (j === i ? next : s)))
                   }
                   errors={{
-                    status: fieldErrors[`steps.${i}.status`],
+                    kind: fieldErrors[`steps.${i}.kind`],
                     title: fieldErrors[`steps.${i}.title`],
                     state: fieldErrors[`steps.${i}.state`],
                     date: fieldErrors[`steps.${i}.date`],
@@ -480,7 +482,7 @@ export function ApplicationForm({
             size="sm"
             className="self-start"
             onClick={() =>
-              setSteps((all) => [...all, emptyStep(all.at(-1)?.status)])
+              setSteps((all) => [...all, emptyStep(all.at(-1)?.kind)])
             }
           >
             <Plus className="size-3.5" /> Add another step
@@ -528,7 +530,12 @@ export function ApplicationForm({
               <Select
                 {...p}
                 value={values.contactId}
-                onChange={(e) => set("contactId", e.target.value)}
+                onChange={(e) => {
+                  set("contactId", e.target.value);
+                  // A new contact usually works for this company.
+                  if (e.target.value === NEW && !newContact.company)
+                    setNewContact((c) => ({ ...c, company: values.company }));
+                }}
               >
                 <option value="">None</option>
                 {options.contacts.map((c) => (
@@ -540,46 +547,24 @@ export function ApplicationForm({
               </Select>
             )}
           </Field>
-          {values.contactId === NEW && (
-            <div className="grid grid-cols-1 gap-2 rounded border border-sand-300 bg-white p-3">
-              <Field label="Name" error={err("name")}>
-                {(p) => (
-                  <Input
-                    {...p}
-                    value={newContact.name}
-                    onChange={(e) =>
-                      setNewContact((c) => ({ ...c, name: e.target.value }))
-                    }
-                  />
-                )}
-              </Field>
-              <Field label="Email" error={err("email")}>
-                {(p) => (
-                  <Input
-                    {...p}
-                    type="email"
-                    value={newContact.email}
-                    onChange={(e) =>
-                      setNewContact((c) => ({ ...c, email: e.target.value }))
-                    }
-                  />
-                )}
-              </Field>
-              <Field label="Role" error={err("role")}>
-                {(p) => (
-                  <Input
-                    {...p}
-                    placeholder="Recruiter, Hiring manager…"
-                    value={newContact.role}
-                    onChange={(e) =>
-                      setNewContact((c) => ({ ...c, role: e.target.value }))
-                    }
-                  />
-                )}
-              </Field>
-            </div>
-          )}
         </div>
+        {values.contactId === NEW && (
+          <div className="rounded border border-sand-300 bg-white p-3 sm:col-span-2">
+            <h4 className="mb-2 text-xs font-medium text-ink-muted">
+              New contact
+            </h4>
+            <ContactFields
+              values={newContact}
+              onChange={setNewContact}
+              // Create sends the contact with the application ("newContact.email");
+              // edit creates it first ("email").
+              errors={contactErrors(
+                fieldErrors,
+                mode === "create" ? "newContact." : "",
+              )}
+            />
+          </div>
+        )}
       </section>
 
       <section className="flex flex-col gap-3">

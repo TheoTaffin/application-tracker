@@ -7,7 +7,8 @@ import * as filesRepo from "@/server/repositories/files";
 import * as notesRepo from "@/server/repositories/notes";
 import * as stepsRepo from "@/server/repositories/steps";
 import * as storage from "@/server/storage/s3";
-import { APP_TIME_ZONE, FOLLOW_UP_HORIZON_DAYS } from "@/lib/constants";
+import { FOLLOW_UP_HORIZON_DAYS } from "@/lib/constants";
+import { addDays, todayInAppTimeZone } from "@/lib/dates";
 import {
   APPLICATION_STATUSES,
   STATUS_GROUPS,
@@ -15,7 +16,13 @@ import {
   type ApplicationStatus,
   type StatusGroup,
 } from "@/lib/status";
-import { appliedDate, currentStep, nextStep, sortSteps } from "@/lib/steps";
+import {
+  appliedDate,
+  currentStep,
+  isStatusKind,
+  nextStep,
+  sortSteps,
+} from "@/lib/steps";
 import {
   applicationInput,
   idInput,
@@ -34,22 +41,6 @@ import {
 } from "./dto";
 import { InvalidInputError, NotFoundError, parseInput } from "./errors";
 import { deleteFile, uploadFile } from "./file-service";
-
-export { APP_TIME_ZONE, FOLLOW_UP_HORIZON_DAYS };
-
-export function todayInAppTimeZone(now = new Date()): string {
-  // en-CA formats as YYYY-MM-DD.
-  return new Intl.DateTimeFormat("en-CA", { timeZone: APP_TIME_ZONE }).format(
-    now,
-  );
-}
-
-/** Add days to a YYYY-MM-DD date (calendar arithmetic, no time zone involved). */
-export function addDays(date: string, days: number): string {
-  const d = new Date(`${date}T00:00:00Z`);
-  d.setUTCDate(d.getUTCDate() + days);
-  return d.toISOString().slice(0, 10);
-}
 
 // ---------------------------------------------------------------------------- DTOs
 
@@ -123,7 +114,7 @@ function progress(stepRows: StepRow[]) {
   const steps = sortSteps(stepRows.map(toStepDTO));
   const current = currentStep(steps) ?? null;
   // Every application is created with a done step; "draft" only guards bad data.
-  const status = current?.status ?? "draft";
+  const status = current && isStatusKind(current.kind) ? current.kind : "draft";
   return {
     steps,
     currentStep: current,

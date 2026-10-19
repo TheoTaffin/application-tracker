@@ -22,6 +22,7 @@ import {
   STEP_STATES,
 } from "../../lib/enums";
 import { APPLICATION_STATUSES } from "../../lib/status";
+import { STEP_KINDS } from "../../lib/steps";
 import type { ExtractedOffer } from "../extraction/types";
 
 // Column names are mapped to snake_case by the `casing` option (client + drizzle.config).
@@ -32,6 +33,7 @@ export const applicationStatus = pgEnum(
 );
 export const stepSource = pgEnum("step_source", STEP_SOURCES);
 export const stepState = pgEnum("step_state", STEP_STATES);
+export const stepKind = pgEnum("step_kind", STEP_KINDS);
 export const postingLanguage = pgEnum("posting_language", POSTING_LANGUAGES);
 export const applicationSource = pgEnum(
   "application_source",
@@ -104,11 +106,12 @@ export const applications = pgTable(
 
 /**
  * The application's timeline: what happened (done) and what is coming (planned).
- * Each step carries a status, which drives the Pending / On-going / Closed groups,
- * and an optional name of its own ("Technical round with Lukas").
+ * A step's kind is a status change (Applied, Interview 1…) or an action (Reach out);
+ * it has an optional name of its own ("Technical round with Lukas").
  *
- * Derived, never stored: the current status is the latest done step, the next action
- * is the earliest planned step, the applied date is the first "applied" step.
+ * Derived, never stored (see lib/steps): the status is the latest done status change,
+ * which drives the Pending / On-going / Closed groups; the next action is the earliest
+ * planned step; the applied date is the first "applied" step.
  */
 export const applicationSteps = pgTable(
   "application_steps",
@@ -117,7 +120,7 @@ export const applicationSteps = pgTable(
     applicationId: uuid()
       .notNull()
       .references(() => applications.id, { onDelete: "cascade" }),
-    status: applicationStatus().notNull(),
+    kind: stepKind().notNull(),
     title: text(),
     state: stepState().default("done").notNull(),
     /** When it happened, or when it is planned (optional for planned steps). */

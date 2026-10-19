@@ -18,6 +18,13 @@ export async function updateStepAction(
   return runAction(() => progress.updateStep(stepId, input));
 }
 
+/** Mark a planned step as done, today. */
+export async function completeStepAction(
+  stepId: string,
+): Promise<ActionResult<StepDTO>> {
+  return runAction(() => progress.completeStep(stepId));
+}
+
 export async function deleteStepAction(stepId: string): Promise<ActionResult> {
   return runAction(() => progress.deleteStep(stepId));
 }

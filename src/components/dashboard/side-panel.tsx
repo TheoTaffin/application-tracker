@@ -142,7 +142,7 @@ export function SidePanel({
       <div className="flex items-center gap-2 border-t border-sand-300 bg-sand-200/50 p-3">
         <AddStepButton
           applicationId={a.id}
-          defaultStatus={a.status}
+          defaultKind={a.status}
           className="flex-1"
         />
         <ButtonLink

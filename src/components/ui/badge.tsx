@@ -1,4 +1,5 @@
 import { cx } from "@/lib/cx";
+import { isStatusKind, kindLabel, type StepKind } from "@/lib/steps";
 import {
   STATUS_GROUP_LABEL,
   STATUS_GROUP_TONE,
@@ -64,6 +65,12 @@ function Pill({
 
 export function StatusBadge({ status }: { status: ApplicationStatus }) {
   return <Pill tone={statusTone(status)}>{STATUS_LABEL[status]}</Pill>;
+}
+
+/** A step's kind: its status, or a neutral pill for an action (Reach out). */
+export function StepKindBadge({ kind }: { kind: StepKind }) {
+  if (isStatusKind(kind)) return <StatusBadge status={kind} />;
+  return <Pill tone="grey">{kindLabel(kind)}</Pill>;
 }
 
 export function GroupBadge({ group }: { group: StatusGroup }) {
