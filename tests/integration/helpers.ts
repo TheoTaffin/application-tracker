@@ -37,5 +37,19 @@ export const baseApplication = {
   language: "de",
   source: "jobs_ch",
   viaAgency: "on",
-  appliedAt: "2026-10-10",
 };
+
+/** The usual first step: applied, done, on a fixed date. */
+export const applied = { status: "applied", state: "done", date: "2026-10-10" };
+
+/** Create input with the minimal valid steps. */
+export function newApplication(
+  application: Record<string, unknown> = {},
+  extra: Record<string, unknown> = {},
+) {
+  return {
+    application: { ...baseApplication, ...application },
+    steps: [applied],
+    ...extra,
+  };
+}

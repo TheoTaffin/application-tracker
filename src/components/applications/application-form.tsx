@@ -1,6 +1,6 @@
 "use client";
 
-import { Check, Link2, Loader2, Sparkles, TriangleAlert } from "lucide-react";
+import { Check, Loader2, Plus, Sparkles, TriangleAlert, X } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, useTransition } from "react";
 import { Button } from "@/components/ui/button";
@@ -15,11 +15,6 @@ import {
 import { APPLICATION_SOURCES, POSTING_LANGUAGES } from "@/lib/enums";
 import { LANGUAGE_LABEL, SOURCE_LABEL } from "@/lib/format";
 import {
-  APPLICATION_STATUSES,
-  STATUS_LABEL,
-  type ApplicationStatus,
-} from "@/lib/status";
-import {
   createApplicationAction,
   extractOfferAction,
   updateApplicationAction,
@@ -31,6 +26,7 @@ import type {
   ExtractionResult,
 } from "@/server/extraction/types";
 import type { FormOptions } from "@/server/services/application-service";
+import { emptyStep, StepFields, type StepValues } from "./step-fields";
 
 export interface ApplicationValues {
   offerUrl: string;
@@ -43,23 +39,14 @@ export interface ApplicationValues {
   language: string;
   source: string;
   viaAgency: boolean;
-  appliedAt: string;
-  nextActionAt: string;
-  nextActionNote: string;
-  description: string;
   formAnswers: string;
-  offerSnapshot: string;
+  /** The posting's text: extracted from the link, or pasted. */
+  jobDescription: string;
   resumeId: string;
   contactId: string;
 }
 
 const NEW = "__new__";
-
-function todayInZurich() {
-  return new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Zurich" }).format(
-    new Date(),
-  );
-}
 
 export function emptyValues(): ApplicationValues {
   return {
@@ -73,21 +60,14 @@ export function emptyValues(): ApplicationValues {
     language: "",
     source: "",
     viaAgency: false,
-    appliedAt: todayInZurich(),
-    nextActionAt: "",
-    nextActionNote: "",
-    description: "",
     formAnswers: "",
-    offerSnapshot: "",
+    jobDescription: "",
     resumeId: "",
     contactId: "",
   };
 }
 
-/**
- * Extracted fields only fill what the user has not typed yet. The posting's own text
- * goes to the offer snapshot; "Description" stays the user's notes.
- */
+/** Extracted fields only fill what the user has not typed (or pasted) yet. */
 function mergeExtracted(
   values: ApplicationValues,
   fields: ExtractedOffer,
@@ -103,6 +83,7 @@ function mergeExtracted(
     workloadMax: fill(values.workloadMax, fields.workloadMax),
     language: fill(values.language, fields.language),
     source: fill(values.source, fields.source),
+    jobDescription: fill(values.jobDescription, fields.description),
   };
 }
 
@@ -130,8 +111,11 @@ export function ApplicationForm({
   const [values, setValues] = useState<ApplicationValues>(
     () => initialValues ?? { ...emptyValues(), offerUrl: autoExtractUrl ?? "" },
   );
-  const [initialStatus, setInitialStatus] =
-    useState<ApplicationStatus>("applied");
+  // Create mode: the steps so far (e.g. applied, then acknowledged) and a first note.
+  const [steps, setSteps] = useState<StepValues[]>(() => [
+    emptyStep("applied"),
+  ]);
+  const [note, setNote] = useState("");
   const [newContact, setNewContact] = useState({
     name: "",
     email: "",
@@ -165,15 +149,14 @@ export function ApplicationForm({
         return;
       }
       setExtraction(result.data);
-      setValues((v) => ({
-        ...mergeExtracted(v, result.data.fields),
-        offerUrl: url,
-        // The structured description is cleaner than the whole-page snapshot.
-        offerSnapshot:
-          result.data.fields.description ??
-          result.data.snapshot ??
-          v.offerSnapshot,
-      }));
+      // The structured description is cleaner than the whole-page text, which is
+      // the fallback when the page has no structured data.
+      const fields = {
+        ...result.data.fields,
+        description:
+          result.data.fields.description ?? result.data.snapshot ?? undefined,
+      };
+      setValues((v) => ({ ...mergeExtracted(v, fields), offerUrl: url }));
     });
   };
 
@@ -211,7 +194,8 @@ export function ApplicationForm({
           "payload",
           JSON.stringify({
             application: applicationFields(),
-            initialStatus,
+            steps,
+            note,
             newContact: values.contactId === NEW ? newContact : null,
             extracted: extraction?.fields ?? null,
           }),
@@ -306,6 +290,25 @@ export function ApplicationForm({
             ))}
           </div>
         )}
+        <Field
+          label="Job description"
+          hint={
+            values.jobDescription
+              ? `${values.jobDescription.length.toLocaleString("de-CH")} characters, kept in case the posting disappears.`
+              : "Fetched from the link above, or paste it here."
+          }
+          error={err("jobDescription")}
+        >
+          {(p) => (
+            <Textarea
+              {...p}
+              rows={8}
+              className="text-xs"
+              value={values.jobDescription}
+              onChange={(e) => set("jobDescription", e.target.value)}
+            />
+          )}
+        </Field>
       </section>
 
       <section className="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -424,60 +427,66 @@ export function ApplicationForm({
         </div>
       </section>
 
-      <section className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-        <h3 className="eyebrow sm:col-span-2">Process</h3>
-        <Field label="Applied on" error={err("appliedAt")}>
-          {(p) => (
-            <Input
-              {...p}
-              type="date"
-              value={values.appliedAt}
-              onChange={(e) => set("appliedAt", e.target.value)}
-            />
+      {mode === "create" && (
+        <section className="flex flex-col gap-3">
+          <div>
+            <h3 className="eyebrow">Steps so far</h3>
+            <p className="mt-1 text-[11px] text-ink-subtle">
+              Everything that already happened (applied, acknowledged,
+              screening…) and anything already planned. The latest done step
+              sets the current status.
+            </p>
+          </div>
+          {err("steps") && (
+            <p className="text-[11px] text-terra-700">
+              {err("steps")!.join(" ")}
+            </p>
           )}
-        </Field>
-        {mode === "create" ? (
-          <Field label="Current status">
-            {(p) => (
-              <Select
-                {...p}
-                value={initialStatus}
-                onChange={(e) =>
-                  setInitialStatus(e.target.value as ApplicationStatus)
-                }
+          <ol className="flex flex-col gap-2">
+            {steps.map((step, i) => (
+              <li
+                key={i}
+                className="relative rounded border border-sand-300 bg-white p-3 pr-9"
               >
-                {APPLICATION_STATUSES.map((s) => (
-                  <option key={s} value={s}>
-                    {STATUS_LABEL[s]}
-                  </option>
-                ))}
-              </Select>
-            )}
-          </Field>
-        ) : (
-          <div className="hidden sm:block" />
-        )}
-        <Field label="Next action on" error={err("nextActionAt")}>
-          {(p) => (
-            <Input
-              {...p}
-              type="date"
-              value={values.nextActionAt}
-              onChange={(e) => set("nextActionAt", e.target.value)}
-            />
-          )}
-        </Field>
-        <Field label="Next action" error={err("nextActionNote")}>
-          {(p) => (
-            <Input
-              {...p}
-              placeholder="Follow up with the recruiter"
-              value={values.nextActionNote}
-              onChange={(e) => set("nextActionNote", e.target.value)}
-            />
-          )}
-        </Field>
-      </section>
+                <StepFields
+                  values={step}
+                  withNote={false}
+                  onChange={(next) =>
+                    setSteps((all) => all.map((s, j) => (j === i ? next : s)))
+                  }
+                  errors={{
+                    status: fieldErrors[`steps.${i}.status`],
+                    title: fieldErrors[`steps.${i}.title`],
+                    state: fieldErrors[`steps.${i}.state`],
+                    date: fieldErrors[`steps.${i}.date`],
+                  }}
+                />
+                {steps.length > 1 && (
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setSteps((all) => all.filter((_, j) => j !== i))
+                    }
+                    className="absolute top-2 right-2 rounded p-1 text-ink-subtle hover:bg-terra-50 hover:text-terra-700"
+                    aria-label="Remove this step"
+                  >
+                    <X className="size-3.5" />
+                  </button>
+                )}
+              </li>
+            ))}
+          </ol>
+          <Button
+            size="sm"
+            className="self-start"
+            onClick={() =>
+              setSteps((all) => [...all, emptyStep(all.at(-1)?.status)])
+            }
+          >
+            <Plus className="size-3.5" /> Add another step
+          </Button>
+        </section>
+      )}
 
       <section className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <h3 className="eyebrow sm:col-span-2">Resume &amp; contact</h3>
@@ -575,20 +584,22 @@ export function ApplicationForm({
 
       <section className="flex flex-col gap-3">
         <h3 className="eyebrow">Notes</h3>
-        <Field
-          label="Description"
-          hint="Your own notes about the role."
-          error={err("description")}
-        >
-          {(p) => (
-            <Textarea
-              {...p}
-              rows={5}
-              value={values.description}
-              onChange={(e) => set("description", e.target.value)}
-            />
-          )}
-        </Field>
+        {mode === "create" && (
+          <Field
+            label="Note"
+            hint="Your own thoughts on this application. It becomes the first entry of its notes."
+            error={err("note")}
+          >
+            {(p) => (
+              <Textarea
+                {...p}
+                rows={4}
+                value={note}
+                onChange={(e) => setNote(e.target.value)}
+              />
+            )}
+          </Field>
+        )}
         <Field
           label="What I answered in the application form"
           hint="Markdown supported."
@@ -604,14 +615,6 @@ export function ApplicationForm({
             />
           )}
         </Field>
-        {values.offerSnapshot && (
-          <p className="flex items-center gap-1.5 text-[11px] text-ink-subtle">
-            <Link2 className="size-3" />
-            Offer text saved (
-            {values.offerSnapshot.length.toLocaleString("de-CH")} characters),
-            in case the posting disappears.
-          </p>
-        )}
       </section>
 
       {mode === "create" && (

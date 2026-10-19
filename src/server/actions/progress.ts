@@ -1,34 +1,25 @@
 "use server";
 
 import * as progress from "@/server/services/progress-service";
-import type { NoteDTO, StageDTO } from "@/server/services/dto";
+import type { NoteDTO, StepDTO } from "@/server/services/dto";
 import { runAction, type ActionResult } from "./result";
 
-export async function addStageAction(
+export async function addStepAction(
   applicationId: string,
   input: unknown,
-): Promise<ActionResult<StageDTO>> {
-  return runAction(() => progress.addStage(applicationId, input));
+): Promise<ActionResult<StepDTO>> {
+  return runAction(() => progress.addStep(applicationId, input));
 }
 
-export async function updateStageAction(
-  stageId: string,
+export async function updateStepAction(
+  stepId: string,
   input: unknown,
-): Promise<ActionResult<StageDTO>> {
-  return runAction(() => progress.updateStage(stageId, input));
+): Promise<ActionResult<StepDTO>> {
+  return runAction(() => progress.updateStep(stepId, input));
 }
 
-export async function deleteStageAction(
-  stageId: string,
-): Promise<ActionResult> {
-  return runAction(() => progress.deleteStage(stageId));
-}
-
-export async function moveStageAction(
-  stageId: string,
-  direction: "up" | "down",
-): Promise<ActionResult> {
-  return runAction(() => progress.moveStage(stageId, direction));
+export async function deleteStepAction(stepId: string): Promise<ActionResult> {
+  return runAction(() => progress.deleteStep(stepId));
 }
 
 export async function addNoteAction(

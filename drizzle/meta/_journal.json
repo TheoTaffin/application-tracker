@@ -15,6 +15,13 @@
       "when": 1792092375735,
       "tag": "0001_stages_and_notes",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1792394552709,
+      "tag": "0002_steps_timeline",
+      "breakpoints": true
     }
   ]
 }

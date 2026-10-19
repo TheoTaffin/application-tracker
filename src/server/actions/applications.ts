@@ -4,7 +4,7 @@ import { extractOffer } from "@/server/extraction";
 import type { ExtractionResult } from "@/server/extraction/types";
 import * as applications from "@/server/services/application-service";
 import { parseInput } from "@/server/services/errors";
-import type { FileDTO, StatusEventDTO } from "@/server/services/dto";
+import type { FileDTO } from "@/server/services/dto";
 import { extractOfferInput } from "@/lib/validation";
 import { filesFrom, jsonPayload, runAction, type ActionResult } from "./result";
 
@@ -53,13 +53,6 @@ export async function deleteApplicationAction(
   id: string,
 ): Promise<ActionResult> {
   return runAction(() => applications.deleteApplication(id));
-}
-
-export async function addStatusUpdateAction(
-  applicationId: string,
-  input: unknown,
-): Promise<ActionResult<StatusEventDTO>> {
-  return runAction(() => applications.addStatusUpdate(applicationId, input));
 }
 
 /** FormData fields: any number of `attachments`. */

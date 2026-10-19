@@ -1,20 +1,13 @@
 import "server-only";
-import { asc, eq } from "drizzle-orm";
-import { db, type Executor } from "@/server/db/client";
-import { applicationStages } from "@/server/db/schema";
+import { db } from "@/server/db/client";
 import * as applicationsRepo from "@/server/repositories/applications";
 import * as notesRepo from "@/server/repositories/notes";
-import * as stagesRepo from "@/server/repositories/stages";
-import {
-  idInput,
-  noteInput,
-  stageInput,
-  stageMoveInput,
-} from "@/lib/validation";
-import { toNoteDTO, toStageDTO, type NoteDTO, type StageDTO } from "./dto";
-import { NotFoundError, parseInput } from "./errors";
+import * as stepsRepo from "@/server/repositories/steps";
+import { idInput, noteInput, stepInput } from "@/lib/validation";
+import { toNoteDTO, toStepDTO, type NoteDTO, type StepDTO } from "./dto";
+import { ConflictError, NotFoundError, parseInput } from "./errors";
 
-/** Custom stages and notes of an application. */
+/** An application's progress: its steps timeline and its notes. */
 
 async function requireApplication(applicationId: string) {
   const id = parseInput(idInput, applicationId);
@@ -23,74 +16,54 @@ async function requireApplication(applicationId: string) {
   return id;
 }
 
-// ------------------------------------------------------------------------ stages
+const LAST_DONE_STEP =
+  "An application needs at least one step that happened: it defines the current status";
 
-export async function addStage(
+// ------------------------------------------------------------------------- steps
+
+export async function addStep(
   applicationId: string,
   input: unknown,
-): Promise<StageDTO> {
+): Promise<StepDTO> {
   const appId = await requireApplication(applicationId);
-  const fields = parseInput(stageInput, input);
-  return db().transaction(async (tx) => {
-    // Only one stage is "the current one".
-    if (fields.state === "active") await demoteActive(tx, appId);
-    return toStageDTO(await stagesRepo.insertStage(tx, appId, fields));
-  });
+  const step = parseInput(stepInput, input);
+  const [row] = await stepsRepo.insertSteps(db(), appId, [step]);
+  return toStepDTO(row);
 }
 
-export async function updateStage(
-  stageId: string,
+export async function updateStep(
+  stepId: string,
   input: unknown,
-): Promise<StageDTO> {
-  const id = parseInput(idInput, stageId);
-  const fields = parseInput(stageInput, input);
+): Promise<StepDTO> {
+  const id = parseInput(idInput, stepId);
+  const fields = parseInput(stepInput, input);
   return db().transaction(async (tx) => {
-    const stage = await stagesRepo.findStage(tx, id);
-    if (!stage) throw new NotFoundError("Stage");
-    if (fields.state === "active")
-      await demoteActive(tx, stage.applicationId, id);
-    return toStageDTO((await stagesRepo.updateStage(tx, id, fields))!);
+    const step = await stepsRepo.findStep(tx, id);
+    if (!step) throw new NotFoundError("Step");
+    if (
+      step.state === "done" &&
+      fields.state !== "done" &&
+      (await stepsRepo.countOtherDoneSteps(tx, step.applicationId, id)) === 0
+    ) {
+      throw new ConflictError(LAST_DONE_STEP);
+    }
+    return toStepDTO((await stepsRepo.updateStep(tx, id, fields))!);
   });
 }
 
-export async function deleteStage(stageId: string): Promise<void> {
-  const row = await stagesRepo.deleteStage(db(), parseInput(idInput, stageId));
-  if (!row) throw new NotFoundError("Stage");
-}
-
-/** Swap a stage with its neighbour. */
-export async function moveStage(
-  stageId: string,
-  direction: unknown,
-): Promise<void> {
-  const id = parseInput(idInput, stageId);
-  const dir = parseInput(stageMoveInput, direction);
+export async function deleteStep(stepId: string): Promise<void> {
+  const id = parseInput(idInput, stepId);
   await db().transaction(async (tx) => {
-    const stage = await stagesRepo.findStage(tx, id);
-    if (!stage) throw new NotFoundError("Stage");
-    const siblings = await tx
-      .select()
-      .from(applicationStages)
-      .where(eq(applicationStages.applicationId, stage.applicationId))
-      .orderBy(asc(applicationStages.position));
-    const index = siblings.findIndex((s) => s.id === id);
-    const other = siblings[dir === "up" ? index - 1 : index + 1];
-    if (!other) return;
-    await stagesRepo.updateStage(tx, stage.id, { position: other.position });
-    await stagesRepo.updateStage(tx, other.id, { position: stage.position });
+    const step = await stepsRepo.findStep(tx, id);
+    if (!step) throw new NotFoundError("Step");
+    if (
+      step.state === "done" &&
+      (await stepsRepo.countOtherDoneSteps(tx, step.applicationId, id)) === 0
+    ) {
+      throw new ConflictError(LAST_DONE_STEP);
+    }
+    await stepsRepo.deleteStep(tx, id);
   });
-}
-
-/** An "active" stage that is replaced by another one counts as passed. */
-async function demoteActive(
-  tx: Executor,
-  applicationId: string,
-  exceptId?: string,
-) {
-  for (const s of await stagesRepo.stagesInState(tx, applicationId, "active")) {
-    if (s.id !== exceptId)
-      await stagesRepo.updateStage(tx, s.id, { state: "passed" });
-  }
 }
 
 // ------------------------------------------------------------------------- notes

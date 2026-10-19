@@ -4,33 +4,31 @@ import { ArrowUpRight, ExternalLink } from "lucide-react";
 import { useState } from "react";
 import { ContactCard } from "@/components/applications/contact-card";
 import { FileRow } from "@/components/applications/documents";
-import { LogUpdateButton } from "@/components/applications/log-update-dialog";
 import { NotesPanel } from "@/components/applications/notes-panel";
-import { StageProgress } from "@/components/applications/stage-progress";
-import { Timeline } from "@/components/applications/timeline";
+import {
+  AddStepButton,
+  StepTimeline,
+} from "@/components/applications/step-timeline";
 import { GroupBadge } from "@/components/ui/badge";
 import { ButtonLink } from "@/components/ui/button";
 import { cx } from "@/lib/cx";
 import { formatChf, formatWorkload, relativeDay } from "@/lib/format";
-import type {
-  FormOptions,
-  WorkspaceApplication,
-} from "@/server/services/application-service";
+import { stepLabel } from "@/lib/steps";
+import type { WorkspaceApplication } from "@/server/services/application-service";
 
-type Tab = "overview" | "notes" | "history";
+type Tab = "overview" | "notes";
 
 /** The selected application's "dossier", next to the table. */
 export function SidePanel({
   application: a,
   today,
-  options,
 }: {
   application: WorkspaceApplication;
   today: string;
-  options: FormOptions;
 }) {
   const [tab, setTab] = useState<Tab>("overview");
-  const due = a.nextActionAt ? relativeDay(a.nextActionAt, today) : null;
+  const next = a.nextStep;
+  const due = next?.date ? relativeDay(next.date, today) : null;
   const facts = [
     a.location,
     formatWorkload(a.workloadMin, a.workloadMax),
@@ -38,9 +36,8 @@ export function SidePanel({
   ].filter(Boolean);
 
   const tabs: { key: Tab; label: string; count?: number }[] = [
-    { key: "overview", label: "Overview & stages" },
+    { key: "overview", label: "Overview & steps" },
     { key: "notes", label: "Notes", count: a.notes.length },
-    { key: "history", label: "History", count: a.events.length },
   ];
 
   return (
@@ -110,17 +107,18 @@ export function SidePanel({
       >
         {tab === "overview" && (
           <>
-            {due && (
+            {next && (
               <div className="rounded-md border border-forest-200 bg-forest-50 p-3 shadow-sm">
                 <span className="eyebrow text-forest-800">
-                  Next step · {due.label}
+                  Next step · {due?.label ?? "no date yet"}
                 </span>
-                <p className="mt-1 text-xs font-medium">
-                  {a.nextActionNote || "Follow up"}
-                </p>
+                <p className="mt-1 text-xs font-medium">{stepLabel(next)}</p>
+                {next.note && (
+                  <p className="mt-1 text-[11px] text-ink-muted">{next.note}</p>
+                )}
               </div>
             )}
-            <StageProgress applicationId={a.id} stages={a.stages} compact />
+            <StepTimeline applicationId={a.id} steps={a.steps} compact />
             {a.contact && (
               <div>
                 <span className="eyebrow mb-1.5 block">Contact</span>
@@ -139,16 +137,12 @@ export function SidePanel({
           </>
         )}
         {tab === "notes" && <NotesPanel applicationId={a.id} notes={a.notes} />}
-        {tab === "history" && <Timeline events={a.events} compact />}
       </div>
 
       <div className="flex items-center gap-2 border-t border-sand-300 bg-sand-200/50 p-3">
-        <LogUpdateButton
+        <AddStepButton
           applicationId={a.id}
-          company={a.company}
-          currentStatus={a.status}
-          contacts={options.contacts}
-          currentContactId={a.contact?.id ?? null}
+          defaultStatus={a.status}
           className="flex-1"
         />
         <ButtonLink

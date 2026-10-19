@@ -16,7 +16,7 @@ Object.assign(process.env, {
 beforeEach(async () => {
   const { db } = await import("@/server/db/client");
   await db().execute(
-    sql`TRUNCATE status_events, files, applications, contacts RESTART IDENTITY CASCADE`,
+    sql`TRUNCATE application_steps, application_notes, files, applications, contacts RESTART IDENTITY CASCADE`,
   );
 });
 

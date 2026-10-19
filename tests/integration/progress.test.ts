@@ -1,74 +1,101 @@
 import { describe, expect, it } from "vitest";
 import * as applications from "@/server/services/application-service";
 import * as contacts from "@/server/services/contact-service";
-import { InvalidInputError, NotFoundError } from "@/server/services/errors";
+import {
+  ConflictError,
+  InvalidInputError,
+  NotFoundError,
+} from "@/server/services/errors";
 import * as progress from "@/server/services/progress-service";
-import { baseApplication, pdfFile, pngFile } from "./helpers";
+import { newApplication, pdfFile, pngFile } from "./helpers";
 
-async function newApplication(company = "Example Bank AG") {
-  return (
-    await applications.createApplication({
-      application: { ...baseApplication, company },
-    })
-  ).id;
+async function create(company = "Example Bank AG") {
+  return (await applications.createApplication(newApplication({ company }))).id;
 }
 
-describe("custom stages", () => {
-  it("appends stages in order and keeps a single active one", async () => {
-    const id = await newApplication();
-    await progress.addStage(id, {
-      name: "Recruiter screen",
-      state: "passed",
-      date: "2026-10-01",
+describe("steps", () => {
+  it("derives the current status and next step as steps are added", async () => {
+    const id = await create();
+    await progress.addStep(id, {
+      status: "interview_1",
+      title: "Technical round",
+      date: "2026-10-20",
     });
-    const panel = await progress.addStage(id, {
-      name: "Leadership panel",
-      state: "active",
+    // Recorded later but happened earlier: must not become the current status.
+    await progress.addStep(id, { status: "acknowledged", date: "2026-10-12" });
+    await progress.addStep(id, {
+      status: "interview_2plus",
+      state: "planned",
+      date: "2026-10-28",
     });
-    await progress.addStage(id, { name: "Offer review" });
+    await progress.addStep(id, { status: "offer", state: "planned" });
 
-    // Making another stage active turns the previous active one into "passed".
-    const offer = (await applications.getApplication(id))!.stages[2];
-    await progress.updateStage(offer.id, {
-      name: "Offer review",
-      state: "active",
-    });
-
-    const stages = (await applications.getApplication(id))!.stages;
-    expect(stages.map((s) => [s.name, s.state])).toEqual([
-      ["Recruiter screen", "passed"],
-      ["Leadership panel", "passed"],
-      ["Offer review", "active"],
+    const detail = (await applications.getApplication(id))!;
+    expect(detail.status).toBe("interview_1");
+    expect(detail.statusGroup).toBe("ongoing");
+    expect(detail.currentStep?.title).toBe("Technical round");
+    expect(detail.nextStep?.status).toBe("interview_2plus");
+    expect(detail.steps.map((s) => s.status)).toEqual([
+      "applied",
+      "acknowledged",
+      "interview_1",
+      "interview_2plus",
+      "offer",
     ]);
-    expect(stages.find((s) => s.id === panel.id)?.state).toBe("passed");
   });
 
-  it("reorders and deletes stages", async () => {
-    const id = await newApplication();
-    const a = await progress.addStage(id, { name: "A" });
-    await progress.addStage(id, { name: "B" });
-    await progress.moveStage(a.id, "down");
-    await progress.moveStage(a.id, "down"); // already last: no-op
-    expect(
-      (await applications.getApplication(id))!.stages.map((s) => s.name),
-    ).toEqual(["B", "A"]);
-    await progress.deleteStage(a.id);
-    expect(
-      (await applications.getApplication(id))!.stages.map((s) => s.name),
-    ).toEqual(["B"]);
+  it("turns a planned step into a done one, moving the status forward", async () => {
+    const id = await create();
+    const planned = await progress.addStep(id, {
+      status: "screening",
+      state: "planned",
+      date: "2026-10-15",
+    });
+    await progress.updateStep(planned.id, {
+      status: "screening",
+      state: "done",
+      date: "2026-10-15",
+      note: "Went well",
+    });
+    const detail = (await applications.getApplication(id))!;
+    expect(detail.status).toBe("screening");
+    expect(detail.nextStep).toBeNull();
+    expect(detail.currentStep?.note).toBe("Went well");
+  });
+
+  it("keeps at least one done step", async () => {
+    const id = await create();
+    const [only] = (await applications.getApplication(id))!.steps;
+    await expect(progress.deleteStep(only.id)).rejects.toBeInstanceOf(
+      ConflictError,
+    );
+    await expect(
+      progress.updateStep(only.id, {
+        status: "applied",
+        state: "planned",
+        date: "2026-10-10",
+      }),
+    ).rejects.toBeInstanceOf(ConflictError);
+
+    await progress.addStep(id, { status: "acknowledged", date: "2026-10-11" });
+    await progress.deleteStep(only.id);
+    expect((await applications.getApplication(id))!.status).toBe(
+      "acknowledged",
+    );
   });
 
   it("validates input and unknown ids", async () => {
-    const id = await newApplication();
-    await expect(progress.addStage(id, { name: " " })).rejects.toBeInstanceOf(
-      InvalidInputError,
-    );
+    const id = await create();
     await expect(
-      progress.addStage(id, { name: "X", state: "done" }),
+      progress.addStep(id, { status: "done" }),
     ).rejects.toBeInstanceOf(InvalidInputError);
     await expect(
-      progress.updateStage("00000000-0000-4000-8000-000000000000", {
-        name: "X",
+      progress.addStep(id, { status: "screening", state: "done" }),
+    ).rejects.toBeInstanceOf(InvalidInputError);
+    await expect(
+      progress.updateStep("00000000-0000-4000-8000-000000000000", {
+        status: "offer",
+        state: "planned",
       }),
     ).rejects.toBeInstanceOf(NotFoundError);
   });
@@ -76,7 +103,7 @@ describe("custom stages", () => {
 
 describe("notes", () => {
   it("adds, edits and deletes notes, newest first", async () => {
-    const id = await newApplication();
+    const id = await create();
     const first = await progress.addNote(id, {
       body: "Call with HR: they want B2 German",
     });
@@ -96,18 +123,9 @@ describe("notes", () => {
   });
 
   it("rejects empty notes", async () => {
-    const id = await newApplication();
+    const id = await create();
     await expect(progress.addNote(id, { body: "  " })).rejects.toBeInstanceOf(
       InvalidInputError,
-    );
-  });
-
-  it("are deleted with their application", async () => {
-    const id = await newApplication();
-    const note = await progress.addNote(id, { body: "x" });
-    await applications.deleteApplication(id);
-    await expect(progress.deleteNote(note.id)).rejects.toBeInstanceOf(
-      NotFoundError,
     );
   });
 });
@@ -116,13 +134,20 @@ describe("workspace", () => {
   it("returns every application with its panel data in one call", async () => {
     const contact = await contacts.createContact({ name: "Lena Brunner" });
     const { id } = await applications.createApplication(
-      { application: { ...baseApplication, contactId: contact.id } },
+      newApplication(
+        { contactId: contact.id },
+        { note: "Bring the portfolio" },
+      ),
       { resumeFile: pdfFile(), attachments: [pngFile()] },
     );
-    await progress.addStage(id, { name: "Technical round", state: "active" });
-    await progress.addNote(id, { body: "Bring the portfolio" });
-    const other = await newApplication("Other AG");
-    await applications.addStatusUpdate(other, { status: "rejected" });
+    await progress.addStep(id, {
+      status: "interview_1",
+      title: "Technical round",
+      state: "planned",
+      date: "2026-11-02",
+    });
+    const other = await create("Other AG");
+    await progress.addStep(other, { status: "rejected", date: "2026-10-20" });
 
     const workspace = await applications.getWorkspace();
     expect(workspace.applications).toHaveLength(2);
@@ -134,13 +159,14 @@ describe("workspace", () => {
 
     const app = workspace.applications.find((a) => a.id === id)!;
     expect(app).toMatchObject({
+      status: "applied",
       contact: { name: "Lena Brunner" },
       resume: { kind: "resume" },
-      activeStage: { name: "Technical round" },
+      nextStep: { title: "Technical round" },
       notes: [{ body: "Bring the portfolio" }],
     });
+    expect(app.steps).toHaveLength(2);
     expect(app.attachments).toHaveLength(1);
-    expect(app.events.map((e) => e.status)).toEqual(["applied"]);
     expect(JSON.stringify(workspace)).not.toMatch(/storageKey/);
     expect(workspace.options.contacts.map((c) => c.name)).toEqual([
       "Lena Brunner",

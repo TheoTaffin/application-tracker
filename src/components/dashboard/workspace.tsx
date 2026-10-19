@@ -31,8 +31,8 @@ function compare(sort: SortKey) {
     case "next_action":
       // Soonest first; applications without a next action go last.
       return (a: WorkspaceApplication, b: WorkspaceApplication) =>
-        (a.nextActionAt ? 0 : 1) - (b.nextActionAt ? 0 : 1) ||
-        text(a.nextActionAt, b.nextActionAt) ||
+        (a.nextStep?.date ? 0 : 1) - (b.nextStep?.date ? 0 : 1) ||
+        text(a.nextStep?.date ?? null, b.nextStep?.date ?? null) ||
         text(a.company, b.company);
     case "applied":
       return (a: WorkspaceApplication, b: WorkspaceApplication) =>
@@ -66,7 +66,7 @@ function visible(all: WorkspaceApplication[], state: DashboardState) {
  */
 export function DashboardWorkspace({ workspace }: { workspace: Workspace }) {
   const [state, update] = useDashboardState();
-  const { dashboard, applications, options } = workspace;
+  const { dashboard, applications } = workspace;
 
   const rows = useMemo(
     () => visible(applications, state),
@@ -76,7 +76,7 @@ export function DashboardWorkspace({ workspace }: { workspace: Workspace }) {
     const ids = new Set(dashboard.followUps.map((f) => f.id));
     return applications
       .filter((a) => ids.has(a.id))
-      .sort((a, b) => a.nextActionAt!.localeCompare(b.nextActionAt!));
+      .sort((a, b) => a.nextStep!.date!.localeCompare(b.nextStep!.date!));
   }, [applications, dashboard.followUps]);
 
   const { pending, ongoing, closed } = dashboard.byGroup;
@@ -105,7 +105,6 @@ export function DashboardWorkspace({ workspace }: { workspace: Workspace }) {
         items={followUps}
         today={dashboard.today}
         hours={FOLLOW_UP_HORIZON_DAYS * 24}
-        options={options}
         onSelect={select}
       />
       <div className="flex flex-col items-stretch gap-6 xl:flex-row xl:items-start">
@@ -123,7 +122,6 @@ export function DashboardWorkspace({ workspace }: { workspace: Workspace }) {
             key={selected.id}
             application={selected}
             today={dashboard.today}
-            options={options}
           />
         )}
       </div>

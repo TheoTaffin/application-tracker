@@ -24,7 +24,9 @@ const day = (offset: number) => {
   return d.toISOString().slice(0, 10);
 };
 
-type Event = [status: string, daysAgo: number, note?: string];
+/** [status, days from today (negative = past), state, title?, note?] */
+type Step = [status: string, inDays: number | null, state: "done" | "planned" | "cancelled", title?: string, note?: string];
+
 interface Demo {
   company: string;
   role: string;
@@ -34,14 +36,10 @@ interface Demo {
   language: string;
   source: string;
   viaAgency?: boolean;
-  appliedDaysAgo: number;
-  next?: [inDays: number, note: string];
   contact?: [name: string, role: string, email: string];
-  description?: string;
+  jobDescription?: string;
   formAnswers?: string;
-  events: Event[];
-  /** Custom stages: [name, state, days from today (negative = past), note]. */
-  stages?: [string, string, number | null, string?][];
+  steps: Step[];
   notes?: string[];
 }
 
@@ -54,23 +52,18 @@ const demos: Demo[] = [
     salaryAsk: 135000,
     language: "de",
     source: "jobs_ch",
-    appliedDaysAgo: 24,
-    next: [0, "Send thank-you note after the technical round"],
     contact: ["Lena Brunner", "Talent Acquisition", "lena.brunner@alpenbank.example"],
-    description: "Data platform team, Databricks + dbt. Hybrid, 2 days on site.",
+    jobDescription:
+      "Für unser Data-Platform-Team suchen wir eine erfahrene Person.\n\nIhre Aufgaben\n- Datenpipelines mit Databricks und dbt entwickeln\n- Datenqualität sicherstellen\n\nIhr Profil\n- Mehrjährige Erfahrung mit Python und SQL",
     formAnswers:
       "**Why us?** Building trustworthy data products for a regulated domain.\n\n- Notice period: 3 months\n- Permit: C",
-    events: [
-      ["applied", 24],
-      ["acknowledged", 22, "Automatic confirmation"],
-      ["screening", 15, "30 min call with Lena, went well"],
-      ["interview_1", 2, "Technical round with the platform lead"],
-    ],
-    stages: [
-      ["Recruiter screen", "passed", -15, "30 min with Lena Brunner"],
-      ["Technical round", "active", -2, "Live SQL + pipeline design with the platform lead"],
-      ["Team fit & leadership", "planned", null],
-      ["Offer", "planned", null],
+    steps: [
+      ["applied", -24, "done"],
+      ["acknowledged", -22, "done", undefined, "Automatic confirmation"],
+      ["screening", -15, "done", "Recruiter screen", "30 min call with Lena, went well"],
+      ["interview_1", -2, "done", "Technical round", "Live SQL + pipeline design with the platform lead"],
+      ["interview_1", 0, "planned", "Send thank-you note"],
+      ["interview_2plus", 6, "planned", "Team fit & leadership"],
     ],
     notes: [
       "They migrate from Hadoop to Databricks this year: mention the Delta Lake project.",
@@ -85,13 +78,12 @@ const demos: Demo[] = [
     salaryAsk: 125000,
     language: "fr",
     source: "jobup_ch",
-    appliedDaysAgo: 18,
-    next: [1, "Prepare the take-home case presentation"],
     contact: ["Marc Dufour", "Head of Data", "marc.dufour@lemanique.example"],
-    events: [
-      ["applied", 18],
-      ["screening", 11],
-      ["assignment", 4, "Case study: claims dashboard, due in a week"],
+    steps: [
+      ["applied", -18, "done"],
+      ["screening", -11, "done"],
+      ["assignment", -4, "done", "Case study received", "Claims dashboard, due in a week"],
+      ["assignment", 1, "planned", "Present the case study"],
     ],
   },
   {
@@ -102,23 +94,15 @@ const demos: Demo[] = [
     salaryAsk: 140000,
     language: "en",
     source: "linkedin",
-    appliedDaysAgo: 35,
-    next: [3, "Decide on the offer"],
     contact: ["Sara Keller", "Engineering Manager", "sara.keller@helvetia-robotics.example"],
-    events: [
-      ["applied", 35],
-      ["screening", 28],
-      ["interview_1", 20],
-      ["interview_2plus", 12, "Panel with the CTO"],
-      ["offer", 3, "Written offer received"],
+    steps: [
+      ["applied", -35, "done"],
+      ["screening", -28, "done", "Initial recruiter screen"],
+      ["interview_1", -20, "done", "Portfolio deep dive", "Walkthrough with the VP Engineering"],
+      ["interview_2plus", -12, "done", "Leadership panel", "Panel with the CTO"],
+      ["offer", -3, "done", "Written offer received"],
+      ["offer", 3, "planned", "Decide on the offer", "Compare remote flexibility with Alpenbank"],
     ],
-    stages: [
-      ["Initial recruiter screen", "passed", -28],
-      ["Portfolio deep dive", "passed", -20, "Walkthrough with the VP Engineering"],
-      ["Leadership panel", "passed", -12, "Panel with the CTO"],
-      ["Offer & final review", "active", 3, "Decision window until Friday"],
-    ],
-    notes: ["Compare remote flexibility with the Alpenbank process before deciding."],
   },
   {
     company: "Bergbahn Digital",
@@ -127,9 +111,10 @@ const demos: Demo[] = [
     workload: [90, 100],
     language: "de",
     source: "company_site",
-    appliedDaysAgo: 6,
-    next: [-1, "Follow up: no answer after one week"],
-    events: [["applied", 6]],
+    steps: [
+      ["applied", -6, "done"],
+      ["applied", -1, "planned", "Follow up: no answer after one week"],
+    ],
   },
   {
     company: "Zytglogge Consulting",
@@ -139,11 +124,10 @@ const demos: Demo[] = [
     language: "de",
     source: "recruiter",
     viaAgency: true,
-    appliedDaysAgo: 9,
     contact: ["Nico Steiner", "Recruiter", "nico.steiner@zytglogge.example"],
-    events: [
-      ["applied", 9],
-      ["acknowledged", 8],
+    steps: [
+      ["applied", -9, "done"],
+      ["acknowledged", -8, "done"],
     ],
   },
   {
@@ -153,10 +137,9 @@ const demos: Demo[] = [
     workload: [100, 100],
     language: "it",
     source: "jobs_ch",
-    appliedDaysAgo: 40,
-    events: [
-      ["applied", 40],
-      ["rejected", 30, "Looking for more pharma experience"],
+    steps: [
+      ["applied", -40, "done"],
+      ["rejected", -30, "done", undefined, "Looking for more pharma experience"],
     ],
   },
   {
@@ -166,10 +149,9 @@ const demos: Demo[] = [
     workload: [80, 100],
     language: "de",
     source: "jobup_ch",
-    appliedDaysAgo: 50,
-    events: [
-      ["applied", 50],
-      ["ghosted", 20, "No reply after two follow-ups"],
+    steps: [
+      ["applied", -50, "done"],
+      ["ghosted", -20, "done", undefined, "No reply after two follow-ups"],
     ],
   },
   {
@@ -179,8 +161,7 @@ const demos: Demo[] = [
     workload: [80, 80],
     language: "fr",
     source: "company_site",
-    appliedDaysAgo: 2,
-    events: [["draft", 2, "Cover letter to finish"]],
+    steps: [["draft", -2, "done", "Cover letter to finish"]],
   },
 ];
 
@@ -197,9 +178,8 @@ for (const d of demos) {
   }
   const app = await client.query(
     `INSERT INTO applications (company, role, location, workload_min, workload_max, salary_ask,
-       language, source, via_agency, applied_at, next_action_at, next_action_note, contact_id,
-       description, form_answers)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15) RETURNING id`,
+       language, source, via_agency, contact_id, job_description, form_answers)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING id`,
     [
       d.company,
       d.role,
@@ -210,18 +190,15 @@ for (const d of demos) {
       d.language,
       d.source,
       d.viaAgency ?? false,
-      day(-d.appliedDaysAgo),
-      d.next ? day(d.next[0]) : null,
-      d.next?.[1] ?? null,
       contactId,
-      d.description ?? null,
+      d.jobDescription ?? null,
       d.formAnswers ?? null,
     ],
   );
-  for (const [i, [name, state, inDays, note]] of (d.stages ?? []).entries()) {
+  for (const [status, inDays, state, title, note] of d.steps) {
     await client.query(
-      "INSERT INTO application_stages (application_id, name, position, state, date, note) VALUES ($1, $2, $3, $4, $5, $6)",
-      [app.rows[0].id, name, i, state, inDays === null ? null : day(inDays), note ?? null],
+      "INSERT INTO application_steps (application_id, status, state, date, title, note) VALUES ($1, $2, $3, $4, $5, $6)",
+      [app.rows[0].id, status, state, inDays === null ? null : day(inDays), title ?? null, note ?? null],
     );
   }
   for (const body of d.notes ?? []) {
@@ -229,12 +206,6 @@ for (const d of demos) {
       app.rows[0].id,
       body,
     ]);
-  }
-  for (const [status, daysAgo, note] of d.events) {
-    await client.query(
-      "INSERT INTO status_events (application_id, status, occurred_at, note) VALUES ($1, $2, $3, $4)",
-      [app.rows[0].id, status, `${day(-daysAgo)}T09:00:00Z`, note ?? null],
-    );
   }
 }
 await client.query("COMMIT");

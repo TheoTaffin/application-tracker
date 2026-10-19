@@ -1,11 +1,5 @@
 import "server-only";
-import type {
-  ContactRow,
-  FileRow,
-  NoteRow,
-  StageRow,
-  StatusEventRow,
-} from "@/server/db/schema";
+import type { ContactRow, FileRow, NoteRow, StepRow } from "@/server/db/schema";
 
 /**
  * Data transfer objects: the only shapes services hand to pages and actions.
@@ -52,37 +46,6 @@ export function toContactDTO(row: ContactRow): ContactDTO {
   };
 }
 
-export type StatusEventDTO = Pick<
-  StatusEventRow,
-  "id" | "status" | "note" | "occurredAt" | "source"
->;
-
-export function toStatusEventDTO(row: StatusEventRow): StatusEventDTO {
-  return {
-    id: row.id,
-    status: row.status,
-    note: row.note,
-    occurredAt: row.occurredAt,
-    source: row.source,
-  };
-}
-
-export type StageDTO = Pick<
-  StageRow,
-  "id" | "name" | "state" | "date" | "note" | "position"
->;
-
-export function toStageDTO(row: StageRow): StageDTO {
-  return {
-    id: row.id,
-    name: row.name,
-    state: row.state,
-    date: row.date,
-    note: row.note,
-    position: row.position,
-  };
-}
-
 export type NoteDTO = Pick<NoteRow, "id" | "body" | "createdAt" | "updatedAt">;
 
 export function toNoteDTO(row: NoteRow): NoteDTO {
@@ -91,5 +54,23 @@ export function toNoteDTO(row: NoteRow): NoteDTO {
     body: row.body,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
+  };
+}
+
+export type StepDTO = Pick<
+  StepRow,
+  "id" | "status" | "title" | "state" | "date" | "note" | "source" | "createdAt"
+>;
+
+export function toStepDTO(row: StepRow): StepDTO {
+  return {
+    id: row.id,
+    status: row.status,
+    title: row.title,
+    state: row.state,
+    date: row.date,
+    note: row.note,
+    source: row.source,
+    createdAt: row.createdAt,
   };
 }

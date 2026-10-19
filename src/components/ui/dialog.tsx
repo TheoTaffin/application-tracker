@@ -37,8 +37,14 @@ export function Dialog({
   return (
     <dialog
       ref={ref}
-      onClose={onClose}
+      // `cancel` and `close` also bubble up from descendants (a file input fires
+      // `cancel` when its picker is dismissed; a nested dialog fires `close`):
+      // only this dialog's own events may close it.
+      onClose={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
       onCancel={(e) => {
+        if (e.target !== e.currentTarget) return;
         e.preventDefault();
         onClose();
       }}

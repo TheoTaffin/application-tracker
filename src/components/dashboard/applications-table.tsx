@@ -6,6 +6,7 @@ import { buttonClass } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/card";
 import { cx } from "@/lib/cx";
 import { formatDate, formatWorkload, relativeDay } from "@/lib/format";
+import { stepLabel } from "@/lib/steps";
 import type { WorkspaceApplication } from "@/server/services/application-service";
 import {
   FILTERS,
@@ -128,9 +129,8 @@ export function ApplicationsTable({
             <tbody className="divide-y divide-sand-200">
               {applications.map((a) => {
                 const selected = a.id === selectedId;
-                const due = a.nextActionAt
-                  ? relativeDay(a.nextActionAt, today)
-                  : null;
+                const next = a.nextStep;
+                const due = next?.date ? relativeDay(next.date, today) : null;
                 const workload = formatWorkload(a.workloadMin, a.workloadMax);
                 return (
                   <tr
@@ -179,28 +179,28 @@ export function ApplicationsTable({
                     </td>
                     <td className="px-3 py-3">
                       <StatusBadge status={a.status} />
-                      {a.activeStage && (
+                      {a.currentStep?.title && (
                         <span className="mt-1 block max-w-[14rem] truncate text-[10px] text-ink-subtle">
-                          {a.activeStage.name}
+                          {a.currentStep.title}
                         </span>
                       )}
                     </td>
                     <td className="px-3 py-3">
-                      {due ? (
+                      {next ? (
                         <>
                           <span className="block font-medium">
-                            {a.nextActionNote || "Next step"}
+                            {stepLabel(next)}
                           </span>
                           <span
                             className={cx(
                               "text-[10px]",
-                              due.urgency === "overdue" ||
-                                due.urgency === "today"
+                              due?.urgency === "overdue" ||
+                                due?.urgency === "today"
                                 ? "font-medium text-terra-700"
                                 : "text-ink-subtle",
                             )}
                           >
-                            {due.label}
+                            {due?.label ?? "No date yet"}
                           </span>
                         </>
                       ) : (

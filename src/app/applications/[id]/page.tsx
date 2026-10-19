@@ -16,10 +16,8 @@ import {
 } from "@/components/applications/attachments";
 import { ContactCard } from "@/components/applications/contact-card";
 import { FileRow } from "@/components/applications/documents";
-import { StatusUpdateForm } from "@/components/applications/status-update-form";
 import { NotesPanel } from "@/components/applications/notes-panel";
-import { StageProgress } from "@/components/applications/stage-progress";
-import { Timeline } from "@/components/applications/timeline";
+import { StepTimeline } from "@/components/applications/step-timeline";
 import { PageHeader } from "@/components/layout/page-header";
 import { GroupBadge, StatusBadge } from "@/components/ui/badge";
 import { Card, CardHeader, Skeleton } from "@/components/ui/card";
@@ -31,6 +29,7 @@ import {
   relativeDay,
   SOURCE_LABEL,
 } from "@/lib/format";
+import { stepLabel } from "@/lib/steps";
 import {
   getApplication,
   getFormOptions,
@@ -53,12 +52,8 @@ function toFormValues(a: ApplicationDetail): ApplicationValues {
     language: str(a.language),
     source: str(a.source),
     viaAgency: a.viaAgency,
-    appliedAt: str(a.appliedAt),
-    nextActionAt: str(a.nextActionAt),
-    nextActionNote: str(a.nextActionNote),
-    description: str(a.description),
     formAnswers: str(a.formAnswers),
-    offerSnapshot: str(a.offerSnapshot),
+    jobDescription: str(a.jobDescription),
     resumeId: a.resume?.id ?? "",
     contactId: a.contact?.id ?? "",
   };
@@ -92,7 +87,8 @@ async function Detail({
   if (!a) notFound();
   const options = await getFormOptions();
   const today = todayInAppTimeZone();
-  const due = a.nextActionAt ? relativeDay(a.nextActionAt, today) : null;
+  const next = a.nextStep;
+  const due = next?.date ? relativeDay(next.date, today) : null;
 
   return (
     <>
@@ -166,17 +162,17 @@ async function Detail({
               </Fact>
               <div className="col-span-2">
                 <Fact label="Next action">
-                  {due && (
+                  {next && (
                     <>
-                      {a.nextActionNote || "Follow up"}{" "}
+                      {stepLabel(next)}{" "}
                       <span
                         className={
-                          due.urgency === "overdue" || due.urgency === "today"
+                          due?.urgency === "overdue" || due?.urgency === "today"
                             ? "text-terra-700"
                             : "text-ink-subtle"
                         }
                       >
-                        · {due.label}
+                        · {due?.label ?? "no date yet"}
                       </span>
                     </>
                   )}
@@ -185,18 +181,25 @@ async function Detail({
             </dl>
           </Card>
 
-          <Card className="p-5">
-            <StageProgress applicationId={a.id} stages={a.stages} />
+          <Card id="steps" className="scroll-mt-24 p-5">
+            <StepTimeline applicationId={a.id} steps={a.steps} />
           </Card>
 
-          {a.description && (
-            <Card>
-              <CardHeader title="Description" />
-              <p className="p-5 text-[13px] leading-relaxed whitespace-pre-line text-ink-muted">
-                {a.description}
+          <Card>
+            <CardHeader
+              title="Job description"
+              description="Kept in case the posting disappears."
+            />
+            {a.jobDescription ? (
+              <p className="max-h-[32rem] overflow-y-auto p-5 text-xs leading-relaxed whitespace-pre-line text-ink-muted">
+                {a.jobDescription}
               </p>
-            </Card>
-          )}
+            ) : (
+              <p className="p-5 text-xs text-ink-subtle">
+                Not saved. Use Edit to fetch it from the link or paste it.
+              </p>
+            )}
+          </Card>
 
           <Card>
             <CardHeader
@@ -216,48 +219,13 @@ async function Detail({
               )}
             </div>
           </Card>
-
-          {a.offerSnapshot && (
-            <Card>
-              <details>
-                <summary className="cursor-pointer px-5 py-4 text-base font-medium">
-                  Saved job offer
-                  <span className="ml-2 text-xs font-normal text-ink-subtle">
-                    kept in case the posting disappears
-                  </span>
-                </summary>
-                <p className="border-t border-sand-200 p-5 text-xs leading-relaxed whitespace-pre-line text-ink-muted">
-                  {a.offerSnapshot}
-                </p>
-              </details>
-            </Card>
-          )}
         </div>
 
         <div className="space-y-6">
-          <Card id="update" className="scroll-mt-24">
-            <CardHeader title="Log an update" />
-            <div className="p-5">
-              <StatusUpdateForm
-                applicationId={a.id}
-                currentStatus={a.status}
-                contacts={options.contacts}
-                currentContactId={a.contact?.id ?? null}
-              />
-            </div>
-          </Card>
-
           <Card>
             <CardHeader title="Notes" />
             <div className="p-5">
               <NotesPanel applicationId={a.id} notes={a.notes} />
-            </div>
-          </Card>
-
-          <Card>
-            <CardHeader title="Status history" />
-            <div className="p-5">
-              <Timeline events={a.events} />
             </div>
           </Card>
 

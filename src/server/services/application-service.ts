@@ -1,12 +1,11 @@
 import "server-only";
 import { db, type Executor } from "@/server/db/client";
-import type { ApplicationRow } from "@/server/db/schema";
+import type { ApplicationRow, StepRow } from "@/server/db/schema";
 import * as applicationsRepo from "@/server/repositories/applications";
 import * as contactsRepo from "@/server/repositories/contacts";
-import * as eventsRepo from "@/server/repositories/status-events";
 import * as filesRepo from "@/server/repositories/files";
 import * as notesRepo from "@/server/repositories/notes";
-import * as stagesRepo from "@/server/repositories/stages";
+import * as stepsRepo from "@/server/repositories/steps";
 import * as storage from "@/server/storage/s3";
 import { APP_TIME_ZONE, FOLLOW_UP_HORIZON_DAYS } from "@/lib/constants";
 import {
@@ -16,24 +15,22 @@ import {
   type ApplicationStatus,
   type StatusGroup,
 } from "@/lib/status";
+import { appliedDate, currentStep, nextStep, sortSteps } from "@/lib/steps";
 import {
   applicationInput,
   idInput,
   newApplicationInput,
-  statusUpdateInput,
   type ApplicationInput,
 } from "@/lib/validation";
 import {
   toContactDTO,
   toFileDTO,
   toNoteDTO,
-  toStageDTO,
-  toStatusEventDTO,
+  toStepDTO,
   type ContactDTO,
   type FileDTO,
   type NoteDTO,
-  type StageDTO,
-  type StatusEventDTO,
+  type StepDTO,
 } from "./dto";
 import { InvalidInputError, NotFoundError, parseInput } from "./errors";
 import { deleteFile, uploadFile } from "./file-service";
@@ -64,12 +61,14 @@ export interface ApplicationSummary {
   workloadMin: number | null;
   workloadMax: number | null;
   source: ApplicationRow["source"];
+  /** Derived from the steps: the first "applied" step. */
   appliedAt: string | null;
-  nextActionAt: string | null;
-  nextActionNote: string | null;
+  /** Derived from the latest done step. */
   status: ApplicationStatus;
   statusGroup: StatusGroup;
-  statusAt: Date;
+  currentStep: StepDTO | null;
+  /** The earliest planned step: what to do next. */
+  nextStep: StepDTO | null;
   contactName: string | null;
   updatedAt: Date;
 }
@@ -78,10 +77,13 @@ export interface ApplicationDetail extends Omit<
   ApplicationRow,
   "resumeId" | "contactId" | "offerExtracted"
 > {
+  appliedAt: string | null;
   status: ApplicationStatus;
   statusGroup: StatusGroup;
-  events: StatusEventDTO[];
-  stages: StageDTO[];
+  currentStep: StepDTO | null;
+  nextStep: StepDTO | null;
+  /** Chronological. */
+  steps: StepDTO[];
   notes: NoteDTO[];
   contact: ContactDTO | null;
   resume: FileDTO | null;
@@ -93,11 +95,8 @@ export interface WorkspaceApplication extends ApplicationSummary {
   offerUrl: string | null;
   salaryAsk: number | null;
   viaAgency: boolean;
-  events: StatusEventDTO[];
-  stages: StageDTO[];
+  steps: StepDTO[];
   notes: NoteDTO[];
-  /** The stage marked active, if any: "where I am" in the process. */
-  activeStage: StageDTO | null;
   contact: ContactDTO | null;
   resume: FileDTO | null;
   attachments: FileDTO[];
@@ -115,22 +114,32 @@ export interface Dashboard {
   byStatus: Record<ApplicationStatus, number>;
   /** Today's date in the app time zone (YYYY-MM-DD), for relative labels. */
   today: string;
-  /** Open applications whose next action is overdue or due within the horizon, soonest first. */
+  /** Open applications whose next step is overdue or due within the horizon, soonest first. */
   followUps: ApplicationSummary[];
-  /** Most recently updated applications. */
-  recent: ApplicationSummary[];
 }
 
-type ListRow = Awaited<
-  ReturnType<typeof applicationsRepo.listApplications>
->[number];
+/** Status and next action of an application, derived from its steps. */
+function progress(stepRows: StepRow[]) {
+  const steps = sortSteps(stepRows.map(toStepDTO));
+  const current = currentStep(steps) ?? null;
+  // Every application is created with a done step; "draft" only guards bad data.
+  const status = current?.status ?? "draft";
+  return {
+    steps,
+    currentStep: current,
+    nextStep: nextStep(steps) ?? null,
+    appliedAt: appliedDate(steps),
+    status,
+    statusGroup: statusGroup(status),
+  };
+}
 
-function toSummary({
-  application: a,
-  status,
-  statusAt,
-  contactName,
-}: ListRow): ApplicationSummary {
+function toSummary(
+  a: ApplicationRow,
+  contactName: string | null,
+  stepRows: StepRow[],
+): ApplicationSummary {
+  const p = progress(stepRows);
   return {
     id: a.id,
     company: a.company,
@@ -139,12 +148,11 @@ function toSummary({
     workloadMin: a.workloadMin,
     workloadMax: a.workloadMax,
     source: a.source,
-    appliedAt: a.appliedAt,
-    nextActionAt: a.nextActionAt,
-    nextActionNote: a.nextActionNote,
-    status,
-    statusGroup: statusGroup(status),
-    statusAt,
+    appliedAt: p.appliedAt,
+    status: p.status,
+    statusGroup: p.statusGroup,
+    currentStep: p.currentStep,
+    nextStep: p.nextStep,
     contactName,
     updatedAt: a.updatedAt,
   };
@@ -162,34 +170,63 @@ function withoutInternals(row: ApplicationRow) {
   >;
 }
 
+function groupBy<T>(rows: T[], key: (row: T) => string | null) {
+  const map = new Map<string, T[]>();
+  for (const row of rows) {
+    const k = key(row);
+    if (k === null) continue;
+    const list = map.get(k);
+    if (list) list.push(row);
+    else map.set(k, [row]);
+  }
+  return map;
+}
+
 // --------------------------------------------------------------------------- reads
+
+/** Every application's summary: two queries, however many applications exist. */
+async function loadSummaries(tx: Executor) {
+  const rows = await applicationsRepo.listApplicationRows(tx);
+  const steps = await stepsRepo.listSteps(
+    tx,
+    rows.map((r) => r.application.id),
+  );
+  const stepsBy = groupBy(steps, (s) => s.applicationId);
+  return {
+    rows,
+    stepsBy,
+    summaries: rows.map((r) =>
+      toSummary(
+        r.application,
+        r.contactName,
+        stepsBy.get(r.application.id) ?? [],
+      ),
+    ),
+  };
+}
 
 export interface ListOptions {
   group?: StatusGroup;
-  statuses?: ApplicationStatus[];
   search?: string;
-  sort?: applicationsRepo.ListFilters["sort"];
 }
 
+/** Applications, most recently updated first, optionally filtered. */
 export async function listApplications(
   options: ListOptions = {},
 ): Promise<ApplicationSummary[]> {
-  const statuses = options.group
-    ? APPLICATION_STATUSES.filter((s) => statusGroup(s) === options.group)
-    : options.statuses;
-  const rows = await applicationsRepo.listApplications(db(), {
-    statuses,
-    search: options.search?.trim().slice(0, 100) || undefined,
-    sort: options.sort,
-  });
-  return rows.map(toSummary);
+  const { summaries } = await loadSummaries(db());
+  const q = options.search?.trim().toLocaleLowerCase();
+  return summaries.filter(
+    (a) =>
+      (!options.group || a.statusGroup === options.group) &&
+      (!q ||
+        a.company.toLocaleLowerCase().includes(q) ||
+        a.role.toLocaleLowerCase().includes(q)),
+  );
 }
 
 export async function getDashboard(now = new Date()): Promise<Dashboard> {
-  const all = (
-    await applicationsRepo.listApplications(db(), { sort: "updated" })
-  ).map(toSummary);
-  return summarize(all, now);
+  return summarize((await loadSummaries(db())).summaries, now);
 }
 
 function summarize(all: ApplicationSummary[], now: Date): Dashboard {
@@ -209,18 +246,11 @@ function summarize(all: ApplicationSummary[], now: Date): Dashboard {
     .filter(
       (a) =>
         a.statusGroup !== "closed" &&
-        a.nextActionAt &&
-        a.nextActionAt <= horizon,
+        a.nextStep?.date &&
+        a.nextStep.date <= horizon,
     )
-    .sort((a, b) => a.nextActionAt!.localeCompare(b.nextActionAt!));
-  return {
-    total: all.length,
-    byGroup,
-    byStatus,
-    today,
-    followUps,
-    recent: all.slice(0, 10),
-  };
+    .sort((a, b) => a.nextStep!.date!.localeCompare(b.nextStep!.date!));
+  return { total: all.length, byGroup, byStatus, today, followUps };
 }
 
 export async function getApplication(
@@ -231,40 +261,21 @@ export async function getApplication(
   const tx = db();
   const row = await applicationsRepo.findApplication(tx, parsed.data);
   if (!row) return null;
-  const [events, attachments, contact, resume, stages, notes] =
-    await Promise.all([
-      eventsRepo.listStatusEvents(tx, row.id),
-      filesRepo.listAttachments(tx, row.id),
-      row.contactId ? contactsRepo.findContact(tx, row.contactId) : undefined,
-      row.resumeId ? filesRepo.findFile(tx, row.resumeId) : undefined,
-      stagesRepo.listStages(tx, [row.id]),
-      notesRepo.listNotes(tx, [row.id]),
-    ]);
-  // Every application is created with an event, so events[0] exists.
-  const status = events[0].status;
+  const [steps, attachments, contact, resume, notes] = await Promise.all([
+    stepsRepo.listSteps(tx, [row.id]),
+    filesRepo.listAttachments(tx, row.id),
+    row.contactId ? contactsRepo.findContact(tx, row.contactId) : undefined,
+    row.resumeId ? filesRepo.findFile(tx, row.resumeId) : undefined,
+    notesRepo.listNotes(tx, [row.id]),
+  ]);
   return {
     ...withoutInternals(row),
-    status,
-    statusGroup: statusGroup(status),
-    events: events.map(toStatusEventDTO),
-    stages: stages.map(toStageDTO),
+    ...progress(steps),
     notes: notes.map(toNoteDTO),
     contact: contact ? toContactDTO(contact) : null,
     resume: resume ? toFileDTO(resume) : null,
     attachments: attachments.map(toFileDTO),
   };
-}
-
-function groupBy<T>(rows: T[], key: (row: T) => string | null) {
-  const map = new Map<string, T[]>();
-  for (const row of rows) {
-    const k = key(row);
-    if (k === null) continue;
-    const list = map.get(k);
-    if (list) list.push(row);
-    else map.set(k, [row]);
-  }
-  return map;
 }
 
 /**
@@ -274,7 +285,7 @@ function groupBy<T>(rows: T[], key: (row: T) => string | null) {
  */
 export async function getWorkspace(now = new Date()): Promise<Workspace> {
   const tx = db();
-  const rows = await applicationsRepo.listApplications(tx, { sort: "updated" });
+  const { rows, stepsBy, summaries } = await loadSummaries(tx);
   const ids = rows.map((r) => r.application.id);
   const contactIds = [
     ...new Set(rows.flatMap((r) => r.application.contactId ?? [])),
@@ -282,44 +293,37 @@ export async function getWorkspace(now = new Date()): Promise<Workspace> {
   const resumeIds = [
     ...new Set(rows.flatMap((r) => r.application.resumeId ?? [])),
   ];
-  const [events, stages, notes, attachments, contacts, resumes, options] =
-    await Promise.all([
-      eventsRepo.listStatusEventsFor(tx, ids),
-      stagesRepo.listStages(tx, ids),
-      notesRepo.listNotes(tx, ids),
-      filesRepo.listAttachmentsFor(tx, ids),
-      contactsRepo.findContacts(tx, contactIds),
-      filesRepo.findFiles(tx, resumeIds),
-      getFormOptions(),
-    ]);
-  const eventsBy = groupBy(events, (e) => e.applicationId);
-  const stagesBy = groupBy(stages, (s) => s.applicationId);
+  const [notes, attachments, contacts, resumes, options] = await Promise.all([
+    notesRepo.listNotes(tx, ids),
+    filesRepo.listAttachmentsFor(tx, ids),
+    contactsRepo.findContacts(tx, contactIds),
+    filesRepo.findFiles(tx, resumeIds),
+    getFormOptions(),
+  ]);
   const notesBy = groupBy(notes, (n) => n.applicationId);
   const attachmentsBy = groupBy(attachments, (f) => f.applicationId);
   const contactById = new Map(contacts.map((c) => [c.id, c]));
   const resumeById = new Map(resumes.map((f) => [f.id, f]));
 
-  const applications = rows.map((row): WorkspaceApplication => {
-    const a = row.application;
-    const appStages = (stagesBy.get(a.id) ?? []).map(toStageDTO);
-    const contact = a.contactId ? contactById.get(a.contactId) : undefined;
-    const resume = a.resumeId ? resumeById.get(a.resumeId) : undefined;
-    return {
-      ...toSummary(row),
-      offerUrl: a.offerUrl,
-      salaryAsk: a.salaryAsk,
-      viaAgency: a.viaAgency,
-      events: (eventsBy.get(a.id) ?? []).map(toStatusEventDTO),
-      stages: appStages,
-      notes: (notesBy.get(a.id) ?? []).map(toNoteDTO),
-      activeStage: appStages.find((st) => st.state === "active") ?? null,
-      contact: contact ? toContactDTO(contact) : null,
-      resume: resume ? toFileDTO(resume) : null,
-      attachments: (attachmentsBy.get(a.id) ?? []).map(toFileDTO),
-    };
-  });
+  const applications = rows.map(
+    ({ application: a }, i): WorkspaceApplication => {
+      const contact = a.contactId ? contactById.get(a.contactId) : undefined;
+      const resume = a.resumeId ? resumeById.get(a.resumeId) : undefined;
+      return {
+        ...summaries[i],
+        offerUrl: a.offerUrl,
+        salaryAsk: a.salaryAsk,
+        viaAgency: a.viaAgency,
+        steps: progress(stepsBy.get(a.id) ?? []).steps,
+        notes: (notesBy.get(a.id) ?? []).map(toNoteDTO),
+        contact: contact ? toContactDTO(contact) : null,
+        resume: resume ? toFileDTO(resume) : null,
+        attachments: (attachmentsBy.get(a.id) ?? []).map(toFileDTO),
+      };
+    },
+  );
 
-  return { dashboard: summarize(applications, now), applications, options };
+  return { dashboard: summarize(summaries, now), applications, options };
 }
 
 /** Choices for the application form's resume and contact pickers. */
@@ -373,15 +377,15 @@ export interface CreateApplicationFiles {
 }
 
 /**
- * Create an application with its first status event, optionally uploading a new
- * resume and attachments. Database writes are transactional; file uploads cannot be,
+ * Create an application with its steps so far (and any planned ones) and an optional
+ * first note, optionally uploading a new resume and attachments. Database writes are transactional; file uploads cannot be,
  * so a failure removes whatever was created before it.
  */
 export async function createApplication(
   input: unknown,
   files: CreateApplicationFiles = {},
 ): Promise<{ id: string }> {
-  const { application, initialStatus, newContact, extracted } = parseInput(
+  const { application, steps, note, newContact, extracted } = parseInput(
     newApplicationInput,
     input,
   );
@@ -403,14 +407,8 @@ export async function createApplication(
       };
       await checkReferences(tx, values);
       const row = await applicationsRepo.insertApplication(tx, values);
-      // The first event happened when I applied, which may be before today.
-      await eventsRepo.insertStatusEvent(tx, {
-        applicationId: row.id,
-        status: initialStatus,
-        occurredAt: application.appliedAt
-          ? new Date(application.appliedAt)
-          : undefined,
-      });
+      await stepsRepo.insertSteps(tx, row.id, steps);
+      if (note) await notesRepo.insertNote(tx, row.id, note);
       return row.id;
     });
     for (const file of files.attachments ?? []) {
@@ -445,40 +443,12 @@ export async function deleteApplication(id: string): Promise<void> {
   const applicationId = parseInput(idInput, id);
   const keys = await db().transaction(async (tx) => {
     const attachments = await filesRepo.listAttachments(tx, applicationId);
-    // Events and attachment rows are removed by ON DELETE CASCADE.
+    // Steps, notes and attachment rows are removed by ON DELETE CASCADE.
     const row = await applicationsRepo.deleteApplication(tx, applicationId);
     if (!row) throw new NotFoundError("Application");
     return attachments.map((a) => a.storageKey);
   });
   await storage.deleteObjects(keys).catch(() => {});
-}
-
-export async function addStatusUpdate(
-  applicationId: string,
-  input: unknown,
-): Promise<StatusEventDTO> {
-  const appId = parseInput(idInput, applicationId);
-  const update = parseInput(statusUpdateInput, input);
-  return db().transaction(async (tx) => {
-    if (!(await applicationsRepo.findApplication(tx, appId)))
-      throw new NotFoundError("Application");
-    if (update.contactId !== undefined) {
-      await checkReferences(tx, {
-        resumeId: null,
-        contactId: update.contactId,
-      });
-      await applicationsRepo.updateApplication(tx, appId, {
-        contactId: update.contactId,
-      });
-    }
-    const event = await eventsRepo.insertStatusEvent(tx, {
-      applicationId: appId,
-      status: update.status,
-      note: update.note,
-      occurredAt: update.occurredAt ? new Date(update.occurredAt) : undefined,
-    });
-    return toStatusEventDTO(event);
-  });
 }
 
 export async function addAttachments(

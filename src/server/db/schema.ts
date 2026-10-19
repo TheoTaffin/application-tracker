@@ -18,8 +18,8 @@ import {
   APPLICATION_SOURCES,
   FILE_KINDS,
   POSTING_LANGUAGES,
-  STAGE_STATES,
-  STATUS_EVENT_SOURCES,
+  STEP_SOURCES,
+  STEP_STATES,
 } from "../../lib/enums";
 import { APPLICATION_STATUSES } from "../../lib/status";
 import type { ExtractedOffer } from "../extraction/types";
@@ -30,17 +30,14 @@ export const applicationStatus = pgEnum(
   "application_status",
   APPLICATION_STATUSES,
 );
-export const statusEventSource = pgEnum(
-  "status_event_source",
-  STATUS_EVENT_SOURCES,
-);
+export const stepSource = pgEnum("step_source", STEP_SOURCES);
+export const stepState = pgEnum("step_state", STEP_STATES);
 export const postingLanguage = pgEnum("posting_language", POSTING_LANGUAGES);
 export const applicationSource = pgEnum(
   "application_source",
   APPLICATION_SOURCES,
 );
 export const fileKind = pgEnum("file_kind", FILE_KINDS);
-export const stageState = pgEnum("stage_state", STAGE_STATES);
 
 const timestamps = {
   createdAt: timestamp({ withTimezone: true }).defaultNow().notNull(),
@@ -68,10 +65,9 @@ export const applications = pgTable(
     id: uuid().primaryKey().defaultRandom(),
     company: text().notNull(),
     role: text().notNull(),
-    description: text(),
     offerUrl: text(),
-    /** Plain-text copy of the posting, kept because postings disappear. */
-    offerSnapshot: text(),
+    /** The posting's text (extracted or pasted), kept because postings disappear. */
+    jobDescription: text(),
     /** Raw extractor output, kept for traceability and later re-processing. */
     offerExtracted: jsonb().$type<ExtractedOffer>(),
     location: text(),
@@ -88,13 +84,9 @@ export const applications = pgTable(
       onDelete: "set null",
     }),
     contactId: uuid().references(() => contacts.id, { onDelete: "set null" }),
-    appliedAt: date({ mode: "string" }),
-    nextActionAt: date({ mode: "string" }),
-    nextActionNote: text(),
     ...timestamps,
   },
   (t) => [
-    index().on(t.nextActionAt),
     index().on(t.contactId),
     index().on(t.resumeId),
     check(
@@ -110,22 +102,39 @@ export const applications = pgTable(
   ],
 );
 
-export const statusEvents = pgTable(
-  "status_events",
+/**
+ * The application's timeline: what happened (done) and what is coming (planned).
+ * Each step carries a status, which drives the Pending / On-going / Closed groups,
+ * and an optional name of its own ("Technical round with Lukas").
+ *
+ * Derived, never stored: the current status is the latest done step, the next action
+ * is the earliest planned step, the applied date is the first "applied" step.
+ */
+export const applicationSteps = pgTable(
+  "application_steps",
   {
     id: uuid().primaryKey().defaultRandom(),
     applicationId: uuid()
       .notNull()
       .references(() => applications.id, { onDelete: "cascade" }),
     status: applicationStatus().notNull(),
+    title: text(),
+    state: stepState().default("done").notNull(),
+    /** When it happened, or when it is planned (optional for planned steps). */
+    date: date({ mode: "string" }),
     note: text(),
-    occurredAt: timestamp({ withTimezone: true }).defaultNow().notNull(),
-    source: statusEventSource().default("manual").notNull(),
-    /** Set when the event came from an email, so a message is never applied twice. */
+    source: stepSource().default("manual").notNull(),
+    /** Set when the step came from an email, so a message is never applied twice. */
     gmailMessageId: text().unique(),
-    createdAt: timestamp({ withTimezone: true }).defaultNow().notNull(),
+    ...timestamps,
   },
-  (t) => [index().on(t.applicationId, t.occurredAt.desc(), t.createdAt.desc())],
+  (t) => [
+    index().on(t.applicationId, t.date),
+    check(
+      "application_steps_done_has_date",
+      sql`${t.state} <> 'done' OR ${t.date} IS NOT NULL`,
+    ),
+  ],
 );
 
 export const files = pgTable(
@@ -156,30 +165,7 @@ export const files = pgTable(
   ],
 );
 
-/**
- * The application's own process steps, named by the user ("Portfolio deep dive",
- * "Leadership panel"), in order. Independent from the fixed status, which drives the
- * Pending / On-going / Closed groups.
- */
-export const applicationStages = pgTable(
-  "application_stages",
-  {
-    id: uuid().primaryKey().defaultRandom(),
-    applicationId: uuid()
-      .notNull()
-      .references(() => applications.id, { onDelete: "cascade" }),
-    name: text().notNull(),
-    position: integer().notNull(),
-    state: stageState().default("planned").notNull(),
-    /** When it is scheduled, or when it happened. */
-    date: date({ mode: "string" }),
-    note: text(),
-    ...timestamps,
-  },
-  (t) => [index().on(t.applicationId, t.position)],
-);
-
-/** Free-form dated notes, separate from status changes. */
+/** Free-form dated notes, separate from the steps. */
 export const applicationNotes = pgTable(
   "application_notes",
   {
@@ -195,9 +181,8 @@ export const applicationNotes = pgTable(
 
 export type ApplicationRow = typeof applications.$inferSelect;
 export type NewApplicationRow = typeof applications.$inferInsert;
-export type StatusEventRow = typeof statusEvents.$inferSelect;
+export type StepRow = typeof applicationSteps.$inferSelect;
 export type ContactRow = typeof contacts.$inferSelect;
 export type NewContactRow = typeof contacts.$inferInsert;
 export type FileRow = typeof files.$inferSelect;
-export type StageRow = typeof applicationStages.$inferSelect;
 export type NoteRow = typeof applicationNotes.$inferSelect;

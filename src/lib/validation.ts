@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { APPLICATION_SOURCES, POSTING_LANGUAGES, STAGE_STATES } from "./enums";
+import { APPLICATION_SOURCES, POSTING_LANGUAGES, STEP_STATES } from "./enums";
 import { APPLICATION_STATUSES } from "./status";
 
 /**
@@ -54,9 +54,8 @@ export const applicationInput = z
   .object({
     company: requiredText(200),
     role: requiredText(300),
-    description: optionalText(20_000),
     offerUrl: optionalUrl,
-    offerSnapshot: optionalText(200_000),
+    jobDescription: optionalText(200_000),
     location: optionalText(200),
     workloadMin: optionalInt(0, 100),
     workloadMax: optionalInt(0, 100),
@@ -67,9 +66,6 @@ export const applicationInput = z
     formAnswers: optionalText(50_000),
     resumeId: optionalUuid,
     contactId: optionalUuid,
-    appliedAt: optionalDate,
-    nextActionAt: optionalDate,
-    nextActionNote: optionalText(1_000),
   })
   .refine(
     (a) =>
@@ -104,42 +100,44 @@ export const extractedOfferInput = z
   .partial()
   .strip();
 
+/** One step of the timeline: something that happened (done) or is coming (planned). */
+export const stepInput = z
+  .object({
+    status: z.enum(APPLICATION_STATUSES),
+    /** Optional name of its own, e.g. "Technical round with Lukas". */
+    title: optionalText(200),
+    state: z.enum(STEP_STATES).default("done"),
+    date: optionalDate,
+    note: optionalText(5_000),
+  })
+  .refine((s) => s.state !== "done" || s.date !== null, {
+    message: "When did it happen?",
+    path: ["date"],
+  });
+export type StepInput = z.infer<typeof stepInput>;
+
 export const newApplicationInput = z.object({
   application: applicationInput,
   extracted: extractedOfferInput.nullish(),
-  initialStatus: z.enum(APPLICATION_STATUSES).default("applied"),
+  /** The steps so far (at least one done), and any already planned. */
+  steps: z
+    .array(stepInput)
+    .min(1)
+    .max(50)
+    .refine((steps) => steps.some((s) => s.state === "done"), {
+      message: "Add at least one step that already happened (e.g. Applied)",
+    }),
+  /** First entry of the notes log. */
+  note: optionalText(5_000),
   /** Create a contact inline instead of picking an existing one. */
   newContact: contactInput.nullish(),
 });
 export type NewApplicationInput = z.input<typeof newApplicationInput>;
-
-export const statusUpdateInput = z.object({
-  status: z.enum(APPLICATION_STATUSES),
-  note: optionalText(5_000),
-  /** When it happened; defaults to now. Accepts a date or a datetime with offset. */
-  occurredAt: z.preprocess(
-    emptyToNull,
-    z.union([z.iso.datetime({ offset: true }), z.iso.date()]).nullable(),
-  ),
-  /** Optionally switch the application's contact at the same time. */
-  contactId: optionalUuid.optional(),
-});
-export type StatusUpdateInput = z.infer<typeof statusUpdateInput>;
 
 export const fileLabelInput = z.object({ label: requiredText(200) });
 
 export const extractOfferInput = z.object({ url: httpUrl });
 
 export const idInput = z.uuid();
-
-export const stageInput = z.object({
-  name: requiredText(200),
-  state: z.enum(STAGE_STATES).default("planned"),
-  date: optionalDate,
-  note: optionalText(2_000),
-});
-export type StageInput = z.infer<typeof stageInput>;
-
-export const stageMoveInput = z.enum(["up", "down"]);
 
 export const noteInput = z.object({ body: requiredText(5_000) });

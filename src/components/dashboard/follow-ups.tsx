@@ -1,15 +1,13 @@
 "use client";
 
 import { BellRing } from "lucide-react";
-import { LogUpdateButton } from "@/components/applications/log-update-dialog";
+import { AddStepButton } from "@/components/applications/step-timeline";
 import { StatusBadge } from "@/components/ui/badge";
 import { Card, CardHeader } from "@/components/ui/card";
 import { cx } from "@/lib/cx";
 import { relativeDay } from "@/lib/format";
-import type {
-  FormOptions,
-  WorkspaceApplication,
-} from "@/server/services/application-service";
+import { stepLabel } from "@/lib/steps";
+import type { WorkspaceApplication } from "@/server/services/application-service";
 
 const chip = {
   overdue: "border-terra-200 bg-terra-100 text-terra-700",
@@ -22,13 +20,11 @@ export function FollowUps({
   items,
   today,
   hours,
-  options,
   onSelect,
 }: {
   items: WorkspaceApplication[];
   today: string;
   hours: number;
-  options: FormOptions;
   onSelect: (id: string) => void;
 }) {
   if (items.length === 0) return null;
@@ -47,7 +43,8 @@ export function FollowUps({
       />
       <ul className="grid grid-cols-1 gap-4 p-5 md:grid-cols-2 xl:grid-cols-3">
         {items.map((a) => {
-          const due = relativeDay(a.nextActionAt!, today);
+          const next = a.nextStep!;
+          const due = relativeDay(next.date!, today);
           return (
             <li
               key={a.id}
@@ -70,12 +67,15 @@ export function FollowUps({
                   <StatusBadge status={a.status} />
                 </div>
                 <h3 className="text-base font-semibold">{a.company}</h3>
-                <p className="mt-0.5 text-xs text-ink-muted">
-                  {a.activeStage ? a.activeStage.name : a.role}
-                </p>
-                {a.nextActionNote && (
+                <p className="mt-0.5 text-xs text-ink-muted">{a.role}</p>
+                {next && (
                   <p className="mt-3 border-t border-sand-200 pt-2.5 text-xs leading-relaxed text-ink">
-                    {a.nextActionNote}
+                    {stepLabel(next)}
+                    {next.note && (
+                      <span className="mt-1 block text-ink-muted">
+                        {next.note}
+                      </span>
+                    )}
                   </p>
                 )}
               </button>
@@ -85,12 +85,9 @@ export function FollowUps({
                     ? `Contact: ${a.contactName}`
                     : "No contact yet"}
                 </span>
-                <LogUpdateButton
+                <AddStepButton
                   applicationId={a.id}
-                  company={a.company}
-                  currentStatus={a.status}
-                  contacts={options.contacts}
-                  currentContactId={a.contact?.id ?? null}
+                  defaultStatus={a.status}
                   variant="ghost"
                   className="h-7 px-2 text-terra-700"
                 />
