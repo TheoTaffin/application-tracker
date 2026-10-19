@@ -55,6 +55,15 @@ export async function deleteApplicationAction(
   return runAction(() => applications.deleteApplication(id));
 }
 
+export async function setApplicationContactAction(
+  applicationId: string,
+  contactId: string | null,
+): Promise<ActionResult> {
+  return runAction(() =>
+    applications.setApplicationContact(applicationId, contactId),
+  );
+}
+
 /** FormData fields: any number of `attachments`. */
 export async function addAttachmentsAction(
   applicationId: string,

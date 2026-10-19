@@ -14,6 +14,7 @@ import {
   AddAttachments,
   RemoveAttachment,
 } from "@/components/applications/attachments";
+import { AddContactButton } from "@/components/applications/add-contact-button";
 import { ContactCard } from "@/components/applications/contact-card";
 import { FileRow } from "@/components/applications/documents";
 import { NotesPanel } from "@/components/applications/notes-panel";
@@ -235,9 +236,10 @@ async function Detail({
               {a.contact ? (
                 <ContactCard contact={a.contact} />
               ) : (
-                <p className="text-xs text-ink-subtle">
-                  No contact yet. Add one with Edit or when logging an update.
-                </p>
+                <div className="flex items-center justify-between gap-3">
+                  <p className="text-xs text-ink-subtle">No contact yet.</p>
+                  <AddContactButton applicationId={a.id} company={a.company} />
+                </div>
               )}
             </div>
           </Card>

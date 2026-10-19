@@ -14,15 +14,10 @@ import {
 } from "./helpers";
 
 describe("creating an application", () => {
-  it("stores the application with its steps, first note, contact, resume and attachments", async () => {
-    const contact = await contacts.createContact({
-      name: "Anna Muster",
-      email: "anna@example.ch",
-      role: "Recruiter",
-    });
+  it("stores the application with its steps, first note, new contact, resume and attachments", async () => {
     const { id } = await applications.createApplication(
       newApplication(
-        { jobDescription: "We build data platforms.", contactId: contact.id },
+        { jobDescription: "We build data platforms." },
         {
           steps: [
             applied,
@@ -35,6 +30,11 @@ describe("creating an application", () => {
             },
           ],
           note: "Referred by a former colleague",
+          newContact: {
+            name: "Anna Muster",
+            email: "anna@example.ch",
+            role: "Recruiter",
+          },
           extracted: { role: "Senior Data Engineer", source: "jobs_ch" },
         },
       ),
@@ -292,5 +292,28 @@ describe("contacts", () => {
     await expect(
       contacts.createContact({ name: "X", email: "not-an-email" }),
     ).rejects.toBeInstanceOf(InvalidInputError);
+  });
+});
+
+describe("application contact", () => {
+  it("links and unlinks a contact", async () => {
+    const { id } = await applications.createApplication(newApplication());
+    const contact = await contacts.createContact({ name: "Nina Recruiter" });
+    await applications.setApplicationContact(id, contact.id);
+    expect((await applications.getApplication(id))!.contact?.name).toBe(
+      "Nina Recruiter",
+    );
+    await applications.setApplicationContact(id, null);
+    expect((await applications.getApplication(id))!.contact).toBeNull();
+  });
+
+  it("rejects an unknown contact", async () => {
+    const { id } = await applications.createApplication(newApplication());
+    await expect(
+      applications.setApplicationContact(
+        id,
+        "00000000-0000-4000-8000-000000000000",
+      ),
+    ).rejects.toThrow("Unknown contact");
   });
 });

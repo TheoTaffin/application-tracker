@@ -19,6 +19,7 @@ import {
   extractOfferAction,
   updateApplicationAction,
 } from "@/server/actions/applications";
+import { createContactAction } from "@/server/actions/contacts";
 import { uploadResumeAction } from "@/server/actions/files";
 import type {
   ExtractedOffer,
@@ -26,7 +27,12 @@ import type {
 } from "@/server/extraction/types";
 import type { FormOptions } from "@/server/services/application-service";
 import { emptyStep, StepFields, type StepValues } from "./step-fields";
-import { NewContactButton } from "@/components/contacts/contact-dialogs";
+import {
+  contactErrors,
+  ContactFields,
+  contactValues,
+  type ContactValues,
+} from "@/components/contacts/contact-fields";
 
 export interface ApplicationValues {
   offerUrl: string;
@@ -116,8 +122,9 @@ export function ApplicationForm({
     emptyStep("applied"),
   ]);
   const [note, setNote] = useState("");
-  // Contacts created from this form (via "New contact") join the picker.
-  const [contacts, setContacts] = useState(options.contacts);
+  const [newContact, setNewContact] = useState<ContactValues>(() =>
+    contactValues(),
+  );
   const [resumeFile, setResumeFile] = useState<File | null>(null);
   const [attachments, setAttachments] = useState<File[]>([]);
   const [extraction, setExtraction] = useState<ExtractionResult | null>(null);
@@ -169,7 +176,7 @@ export function ApplicationForm({
     return {
       ...rest,
       resumeId: resumeId === NEW ? "" : resumeId,
-      contactId,
+      contactId: contactId === NEW ? "" : contactId,
     };
   };
 
@@ -191,6 +198,7 @@ export function ApplicationForm({
             application: applicationFields(),
             steps,
             note,
+            newContact: values.contactId === NEW ? newContact : null,
             extracted: extraction?.fields ?? null,
           }),
         );
@@ -203,8 +211,13 @@ export function ApplicationForm({
         return;
       }
 
-      // Edit: upload a new resume first, then save the application.
+      // Edit: create the new contact / resume first, then save the application.
       const overrides: Partial<ApplicationValues> = {};
+      if (values.contactId === NEW) {
+        const contact = await createContactAction(newContact);
+        if (!contact.ok) return fail(contact);
+        overrides.contactId = contact.data.id;
+      }
       if (values.resumeId === NEW && resumeFile) {
         const formData = new FormData();
         formData.set("file", resumeFile);
@@ -511,40 +524,47 @@ export function ApplicationForm({
             </Field>
           )}
         </div>
-        <div className="flex items-end gap-2">
-          <Field label="Contact" className="flex-1" error={err("contactId")}>
+        <div className="flex flex-col gap-2">
+          <Field label="Contact" error={err("contactId")}>
             {(p) => (
               <Select
                 {...p}
                 value={values.contactId}
-                onChange={(e) => set("contactId", e.target.value)}
+                onChange={(e) => {
+                  set("contactId", e.target.value);
+                  // A new contact usually works for this company.
+                  if (e.target.value === NEW && !newContact.company)
+                    setNewContact((c) => ({ ...c, company: values.company }));
+                }}
               >
                 <option value="">None</option>
-                {contacts.map((c) => (
+                {options.contacts.map((c) => (
                   <option key={c.id} value={c.id}>
                     {c.company ? `${c.name} · ${c.company}` : c.name}
                   </option>
                 ))}
+                <option value={NEW}>New contact…</option>
               </Select>
             )}
           </Field>
-          <NewContactButton
-            variant="secondary"
-            // A new contact usually works for this company.
-            defaults={{ company: values.company || null }}
-            onCreated={(contact) => {
-              setContacts((all) => [
-                ...all,
-                {
-                  id: contact.id,
-                  name: contact.name,
-                  company: contact.company,
-                },
-              ]);
-              set("contactId", contact.id);
-            }}
-          />
         </div>
+        {values.contactId === NEW && (
+          <div className="rounded border border-sand-300 bg-white p-3 sm:col-span-2">
+            <h4 className="mb-2 text-xs font-medium text-ink-muted">
+              New contact
+            </h4>
+            <ContactFields
+              values={newContact}
+              onChange={setNewContact}
+              // Create sends the contact with the application ("newContact.email");
+              // edit creates it first ("email").
+              errors={contactErrors(
+                fieldErrors,
+                mode === "create" ? "newContact." : "",
+              )}
+            />
+          </div>
+        )}
       </section>
 
       <section className="flex flex-col gap-3">

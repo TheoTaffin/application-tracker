@@ -376,7 +376,7 @@ export async function createApplication(
   input: unknown,
   files: CreateApplicationFiles = {},
 ): Promise<{ id: string }> {
-  const { application, steps, note, extracted } = parseInput(
+  const { application, steps, note, newContact, extracted } = parseInput(
     newApplicationInput,
     input,
   );
@@ -387,8 +387,12 @@ export async function createApplication(
   let id: string | undefined;
   try {
     id = await db().transaction(async (tx) => {
+      const contactId = newContact
+        ? (await contactsRepo.insertContact(tx, newContact)).id
+        : application.contactId;
       const values = {
         ...application,
+        contactId,
         resumeId: uploadedResume?.id ?? application.resumeId,
         offerExtracted: extracted ?? null,
       };
@@ -436,6 +440,22 @@ export async function deleteApplication(id: string): Promise<void> {
     return attachments.map((a) => a.storageKey);
   });
   await storage.deleteObjects(keys).catch(() => {});
+}
+
+/** Link a contact to an application (or unlink with null). */
+export async function setApplicationContact(
+  applicationId: string,
+  contactId: string | null,
+): Promise<void> {
+  const appId = parseInput(idInput, applicationId);
+  const contact = contactId === null ? null : parseInput(idInput, contactId);
+  await db().transaction(async (tx) => {
+    await checkReferences(tx, { resumeId: null, contactId: contact });
+    const row = await applicationsRepo.updateApplication(tx, appId, {
+      contactId: contact,
+    });
+    if (!row) throw new NotFoundError("Application");
+  });
 }
 
 export async function addAttachments(
