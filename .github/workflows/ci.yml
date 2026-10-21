@@ -1,0 +1,49 @@
+name: CI
+
+on:
+  push:
+    branches: [main] # feature branches are covered by pull_request
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  unit-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: make deps-js
+      - run: make test
+
+  # Real Postgres + S3 storage via the dev stack (`make dev`).
+  integration-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: make deps-js
+      - run: make env
+      - run: make test-integration
+
+  # Builds the production images and checks the whole stack becomes healthy.
+  docker-stack:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - run: make env
+      - run: make up
+      - run: curl --fail --silent --show-error http://127.0.0.1:3000/api/health
+      - if: failure()
+        run: docker compose logs

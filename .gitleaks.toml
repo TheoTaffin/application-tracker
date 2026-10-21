@@ -1,0 +1,8 @@
+# Default gitleaks rules, plus narrowly scoped allowlists for known false positives.
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "TypeScript identifiers matched by the linkedin-client-id rule"
+regexTarget = "line"
+regexes = ['''linkedInExtractor\s*:\s*OfferExtractor''']

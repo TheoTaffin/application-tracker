@@ -3,3 +3,5 @@ node_modules/
 package-lock.json
 uv.lock
 next-env.d.ts
+drizzle/
+backups/
