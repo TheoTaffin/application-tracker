@@ -109,8 +109,8 @@ but the app.
 
 ## Deployment
 
-Every push to `main` deploys to a Raspberry Pi at home, once every CI job has passed
-(`.github/workflows/ci.yml`):
+Every push to `main` deploys to a Raspberry Pi at home, once CI has passed on it
+(`.github/workflows/cd.yml`):
 
 1. **publish** builds the `runner` and `init` images on a native arm64 runner and pushes them to
    GHCR, tagged with the commit SHA (and `latest`).
