@@ -86,6 +86,7 @@ jobs:
           ping: ${{ vars.DEPLOY_HOST }}
 
       - name: Configure SSH
+        id: ssh
         env:
           SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
           KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
@@ -128,5 +129,6 @@ jobs:
       - name: Remove old images
         run: ssh target application-tracker/scripts/entrypoint.sh prune
 
-      - if: failure()
+      # Only once SSH is set up: a failure before that has nothing to show on the server.
+      - if: failure() && steps.ssh.outcome == 'success'
         run: ssh target application-tracker/scripts/entrypoint.sh logs
