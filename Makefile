@@ -1,6 +1,6 @@
 .DEFAULT_GOAL := help
 .PHONY: help deps deps-py deps-js setup lint lint-commits lint-pr-title format test test-integration \
-	env build up down logs ps tools dev db-generate backup
+	env build up down logs ps tools dev seed db-generate backup
 
 COMPOSE := docker compose
 COMPOSE_DEV := docker compose -f compose.yaml -f compose.dev.yaml
@@ -83,12 +83,14 @@ dev: ## Start database + storage for `npm run dev` on the host
 	$(COMPOSE_DEV) up -d --wait db storage
 	$(COMPOSE_DEV) run --rm --build init
 
+seed: ## Load fictional demo data into an empty dev database (after `make dev`)
+	node --env-file=.env scripts/seed.mts
+
 db-generate: ## Generate a migration from schema changes (drizzle/)
 	npx drizzle-kit generate
 
-backup: ## Dump the database and archive stored files into ./backups
-	@mkdir -p backups && ts=$$(date +%Y%m%d-%H%M%S); \
+backup: ## Dump the database and archive stored files into ./backups (stack must be up)
+	@set -e; mkdir -p backups; ts=$$(date +%Y%m%d-%H%M%S); \
 	$(COMPOSE) exec -T db sh -c 'pg_dump -U "$$POSTGRES_USER" -d "$$POSTGRES_DB" -Fc' > backups/db-$$ts.dump; \
-	$(COMPOSE) run --rm --no-deps -v "$$PWD/backups:/backup" --entrypoint tar storage \
-		czf /backup/files-$$ts.tar.gz -C /data . ; \
-	echo "Backup written to backups/*-$$ts.*"
+	$(COMPOSE) exec -T storage tar czf - -C /data . > backups/files-$$ts.tar.gz; \
+	echo "Backup written to backups/db-$$ts.dump and backups/files-$$ts.tar.gz"

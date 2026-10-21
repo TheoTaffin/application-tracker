@@ -2,32 +2,42 @@ import { describe, expect, it } from "vitest";
 import * as applications from "@/server/services/application-service";
 import * as contacts from "@/server/services/contact-service";
 import * as files from "@/server/services/file-service";
+import { ConflictError, InvalidInputError } from "@/server/services/errors";
+import * as progress from "@/server/services/progress-service";
 import {
-  ConflictError,
-  InvalidInputError,
-  NotFoundError,
-} from "@/server/services/errors";
-import {
-  baseApplication,
+  applied,
   fakePdf,
+  newApplication,
   pdfFile,
   pngFile,
   streamToText,
 } from "./helpers";
 
 describe("creating an application", () => {
-  it("stores the application with its first status, a new contact, resume and attachments", async () => {
+  it("stores the application with its steps, first note, new contact, resume and attachments", async () => {
     const { id } = await applications.createApplication(
-      {
-        application: baseApplication,
-        initialStatus: "applied",
-        newContact: {
-          name: "Anna Muster",
-          email: "anna@example.ch",
-          role: "Recruiter",
+      newApplication(
+        { jobDescription: "We build data platforms." },
+        {
+          steps: [
+            applied,
+            { kind: "acknowledged", state: "done", date: "2026-10-12" },
+            {
+              kind: "screening",
+              title: "Call with HR",
+              state: "planned",
+              date: "2026-10-20",
+            },
+          ],
+          note: "Referred by a former colleague",
+          newContact: {
+            name: "Anna Muster",
+            email: "anna@example.ch",
+            role: "Recruiter",
+          },
+          extracted: { role: "Senior Data Engineer", source: "jobs_ch" },
         },
-        extracted: { role: "Senior Data Engineer", source: "jobs_ch" },
-      },
+      ),
       {
         resumeFile: pdfFile("CV_EN_v3.pdf"),
         attachments: [pngFile(), pdfFile("letter.pdf")],
@@ -37,17 +47,29 @@ describe("creating an application", () => {
     const detail = await applications.getApplication(id);
     expect(detail).toMatchObject({
       company: "Example Bank AG",
+      jobDescription: "We build data platforms.",
       workloadMin: 80,
       workloadMax: 100,
       salaryAsk: 130000,
       viaAgency: true,
       appliedAt: "2026-10-10",
-      status: "applied",
+      status: "acknowledged",
       statusGroup: "pending",
+      currentStep: { kind: "acknowledged", date: "2026-10-12" },
+      nextStep: {
+        kind: "screening",
+        title: "Call with HR",
+        state: "planned",
+      },
+      notes: [{ body: "Referred by a former colleague" }],
       contact: { name: "Anna Muster", email: "anna@example.ch" },
       resume: { label: "CV_EN_v3", kind: "resume", mime: "application/pdf" },
     });
-    expect(detail!.events).toHaveLength(1);
+    expect(detail!.steps.map((s) => s.kind)).toEqual([
+      "applied",
+      "acknowledged",
+      "screening",
+    ]);
     expect(detail!.attachments.map((a) => a.mime).sort()).toEqual([
       "application/pdf",
       "image/png",
@@ -55,155 +77,147 @@ describe("creating an application", () => {
   });
 
   it("never exposes storage keys in DTOs", async () => {
-    const { id } = await applications.createApplication(
-      { application: baseApplication },
-      { resumeFile: pdfFile() },
-    );
+    const { id } = await applications.createApplication(newApplication(), {
+      resumeFile: pdfFile(),
+    });
     const json = JSON.stringify(await applications.getApplication(id));
     expect(json).not.toMatch(/storageKey|resumes\//);
   });
 
-  it("reports field errors for invalid input", async () => {
+  it("reports field errors by path, including steps", async () => {
     const error = await applications
-      .createApplication({
-        application: {
-          ...baseApplication,
-          company: " ",
-          workloadMin: "90",
-          workloadMax: "60",
-        },
-      })
+      .createApplication(
+        newApplication(
+          { company: " ", workloadMin: "90", workloadMax: "60" },
+          { steps: [{ kind: "applied", state: "done", date: "" }] },
+        ),
+      )
       .catch((e) => e);
     expect(error).toBeInstanceOf(InvalidInputError);
     expect(Object.keys(error.fieldErrors)).toEqual(
       expect.arrayContaining([
         "application.company",
         "application.workloadMax",
+        "steps.0.date",
       ]),
     );
   });
 
+  it("requires at least one step that happened", async () => {
+    const error = await applications
+      .createApplication(
+        newApplication(
+          {},
+          {
+            steps: [
+              { kind: "interview_1", state: "planned", date: "2026-11-01" },
+            ],
+          },
+        ),
+      )
+      .catch((e) => e);
+    expect(error).toBeInstanceOf(InvalidInputError);
+    expect(error.fieldErrors.steps).toBeDefined();
+  });
+
+  it("does not accept actions alone as the steps so far", async () => {
+    const error = await applications
+      .createApplication(
+        newApplication(
+          {},
+          { steps: [{ kind: "reach_out", state: "done", date: "2026-10-10" }] },
+        ),
+      )
+      .catch((e) => e);
+    expect(error).toBeInstanceOf(InvalidInputError);
+  });
+
   it("rejects a resume id that points at an attachment", async () => {
-    const { id } = await applications.createApplication(
-      { application: baseApplication },
-      { attachments: [pdfFile()] },
-    );
+    const { id } = await applications.createApplication(newApplication(), {
+      attachments: [pdfFile()],
+    });
     const [attachment] = (await applications.getApplication(id))!.attachments;
     await expect(
-      applications.createApplication({
-        application: { ...baseApplication, resumeId: attachment.id },
-      }),
+      applications.createApplication(
+        newApplication({ resumeId: attachment.id }),
+      ),
     ).rejects.toThrow("Unknown resume");
   });
 
   it("rolls back uploads when a later step fails", async () => {
     await expect(
-      applications.createApplication(
-        { application: baseApplication },
-        { resumeFile: pdfFile(), attachments: [fakePdf()] },
-      ),
+      applications.createApplication(newApplication(), {
+        resumeFile: pdfFile(),
+        attachments: [fakePdf()],
+      }),
     ).rejects.toBeInstanceOf(InvalidInputError);
     expect(await applications.listApplications()).toHaveLength(0);
     expect(await files.listResumes()).toHaveLength(0);
   });
 });
 
-describe("status updates", () => {
-  it("uses the most recent event as the current status", async () => {
-    const { id } = await applications.createApplication({
-      application: baseApplication,
-    });
-    await applications.addStatusUpdate(id, {
-      status: "interview_1",
-      occurredAt: "2026-10-20",
-    });
-    // Recorded later but happened earlier: must not become the current status.
-    await applications.addStatusUpdate(id, {
-      status: "acknowledged",
-      occurredAt: "2026-10-12",
-    });
-
-    const detail = await applications.getApplication(id);
-    expect(detail!.status).toBe("interview_1");
-    expect(detail!.statusGroup).toBe("ongoing");
-    expect(detail!.events.map((e) => e.status)).toEqual([
-      "interview_1",
-      "acknowledged",
-      "applied",
-    ]);
-  });
-
-  it("can switch the contact with an update", async () => {
-    const { id } = await applications.createApplication({
-      application: baseApplication,
-    });
-    const contact = await contacts.createContact({ name: "Hiring Manager" });
-    await applications.addStatusUpdate(id, {
-      status: "screening",
-      contactId: contact.id,
-    });
-    expect((await applications.getApplication(id))!.contact?.name).toBe(
-      "Hiring Manager",
-    );
-  });
-
-  it("fails for an unknown application", async () => {
-    await expect(
-      applications.addStatusUpdate("00000000-0000-4000-8000-000000000000", {
-        status: "offer",
-      }),
-    ).rejects.toBeInstanceOf(NotFoundError);
-  });
-});
-
 describe("listing and dashboard", () => {
-  it("counts by group and lists due follow-ups, excluding closed ones", async () => {
-    const due = await applications.createApplication({
-      application: {
-        ...baseApplication,
-        company: "Due AG",
-        nextActionAt: "2026-10-14",
-      },
+  it("counts by group and lists follow-ups from planned steps, excluding closed ones", async () => {
+    const plan = (date: string) => ({
+      kind: "applied",
+      title: "Follow up",
+      state: "planned",
+      date,
     });
-    await applications.createApplication({
-      application: {
-        ...baseApplication,
-        company: "Later AG",
-        nextActionAt: "2026-12-01",
-      },
-    });
-    const closed = await applications.createApplication({
-      application: {
-        ...baseApplication,
-        company: "Closed AG",
-        nextActionAt: "2026-10-01",
-      },
-    });
-    await applications.addStatusUpdate(closed.id, { status: "rejected" });
+    const due = await applications.createApplication(
+      newApplication(
+        { company: "Due AG" },
+        { steps: [applied, plan("2026-10-14")] },
+      ),
+    );
+    const soon = await applications.createApplication(
+      newApplication(
+        { company: "Soon AG" },
+        { steps: [applied, plan("2026-10-17")] },
+      ),
+    );
+    await applications.createApplication(
+      newApplication(
+        { company: "Later AG" },
+        { steps: [applied, plan("2026-12-01")] },
+      ),
+    );
+    await applications.createApplication(
+      newApplication(
+        { company: "Closed AG" },
+        {
+          steps: [
+            applied,
+            { kind: "rejected", state: "done", date: "2026-10-12" },
+            plan("2026-10-01"),
+          ],
+        },
+      ),
+    );
 
     const dashboard = await applications.getDashboard(
       new Date("2026-10-15T10:00:00+02:00"),
     );
-    expect(dashboard.total).toBe(3);
-    expect(dashboard.byGroup).toEqual({ pending: 2, ongoing: 0, closed: 1 });
+    expect(dashboard.total).toBe(4);
+    expect(dashboard.today).toBe("2026-10-15");
+    expect(dashboard.byGroup).toEqual({ pending: 3, ongoing: 0, closed: 1 });
     expect(dashboard.byStatus.rejected).toBe(1);
-    expect(dashboard.followUps.map((a) => a.id)).toEqual([due.id]);
+    expect(dashboard.followUps.map((a) => a.id)).toEqual([due.id, soon.id]);
   });
 
   it("filters by group and searches literally", async () => {
-    await applications.createApplication({
-      application: { ...baseApplication, company: "100% Remote GmbH" },
-    });
-    await applications.createApplication({
-      application: { ...baseApplication, company: "Other AG" },
-    });
+    await applications.createApplication(
+      newApplication({ company: "100% Remote GmbH" }),
+    );
+    await applications.createApplication(
+      newApplication({ company: "Other AG" }),
+    );
 
     expect(
       (await applications.listApplications({ search: "100%" })).map(
         (a) => a.company,
       ),
     ).toEqual(["100% Remote GmbH"]);
-    // "%" alone must not act as a wildcard matching everything.
     expect(await applications.listApplications({ search: "%" })).toHaveLength(
       1,
     );
@@ -232,23 +246,31 @@ describe("files", () => {
 
   it("refuses to delete a resume that is in use", async () => {
     const resume = await files.uploadFile({ file: pdfFile(), kind: "resume" });
-    await applications.createApplication({
-      application: { ...baseApplication, resumeId: resume.id },
-    });
+    await applications.createApplication(
+      newApplication({ resumeId: resume.id }),
+    );
     await expect(files.deleteFile(resume.id)).rejects.toBeInstanceOf(
       ConflictError,
     );
     expect((await files.listResumes())[0].uses).toBe(1);
   });
 
-  it("deletes attachments with their application", async () => {
+  it("deletes attachments, steps and notes with their application", async () => {
     const { id } = await applications.createApplication(
-      { application: baseApplication },
-      { attachments: [pngFile()] },
+      newApplication({}, { note: "x" }),
+      {
+        attachments: [pngFile()],
+      },
     );
-    const [attachment] = (await applications.getApplication(id))!.attachments;
+    const detail = (await applications.getApplication(id))!;
     await applications.deleteApplication(id);
-    expect(await files.openFile(attachment.id)).toBeNull();
+    expect(await files.openFile(detail.attachments[0].id)).toBeNull();
+    await expect(progress.deleteStep(detail.steps[0].id)).rejects.toThrow(
+      /not found/,
+    );
+    await expect(progress.deleteNote(detail.notes[0].id)).rejects.toThrow(
+      /not found/,
+    );
   });
 });
 
@@ -258,9 +280,9 @@ describe("contacts", () => {
       name: "Recruiter",
       email: "r@agency.ch",
     });
-    const { id } = await applications.createApplication({
-      application: { ...baseApplication, contactId: contact.id },
-    });
+    const { id } = await applications.createApplication(
+      newApplication({ contactId: contact.id }),
+    );
     expect((await contacts.listContacts())[0].applicationCount).toBe(1);
     await contacts.deleteContact(contact.id);
     expect((await applications.getApplication(id))!.contact).toBeNull();
@@ -270,5 +292,28 @@ describe("contacts", () => {
     await expect(
       contacts.createContact({ name: "X", email: "not-an-email" }),
     ).rejects.toBeInstanceOf(InvalidInputError);
+  });
+});
+
+describe("application contact", () => {
+  it("links and unlinks a contact", async () => {
+    const { id } = await applications.createApplication(newApplication());
+    const contact = await contacts.createContact({ name: "Nina Recruiter" });
+    await applications.setApplicationContact(id, contact.id);
+    expect((await applications.getApplication(id))!.contact?.name).toBe(
+      "Nina Recruiter",
+    );
+    await applications.setApplicationContact(id, null);
+    expect((await applications.getApplication(id))!.contact).toBeNull();
+  });
+
+  it("rejects an unknown contact", async () => {
+    const { id } = await applications.createApplication(newApplication());
+    await expect(
+      applications.setApplicationContact(
+        id,
+        "00000000-0000-4000-8000-000000000000",
+      ),
+    ).rejects.toThrow("Unknown contact");
   });
 });

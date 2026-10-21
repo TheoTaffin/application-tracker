@@ -27,6 +27,6 @@ describe("status model", () => {
     expect(statusTone("rejected")).toBe("red");
     expect(statusTone("withdrawn")).toBe("grey");
     expect(statusTone("draft")).toBe("amber");
-    expect(statusTone("screening")).toBe("blue");
+    expect(statusTone("screening")).toBe("green");
   });
 });

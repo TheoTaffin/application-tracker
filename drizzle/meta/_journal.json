@@ -8,6 +8,27 @@
       "when": 1792088543110,
       "tag": "0000_init",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1792092375735,
+      "tag": "0001_stages_and_notes",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1792394552709,
+      "tag": "0002_steps_timeline",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1792405450109,
+      "tag": "0003_step_kinds",
+      "breakpoints": true
     }
   ]
 }

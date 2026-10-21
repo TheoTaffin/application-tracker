@@ -14,8 +14,13 @@ export const APPLICATION_SOURCES = [
 ] as const;
 export type ApplicationSource = (typeof APPLICATION_SOURCES)[number];
 
-export const STATUS_EVENT_SOURCES = ["manual", "gmail"] as const;
-export type StatusEventSource = (typeof STATUS_EVENT_SOURCES)[number];
+/** Where a step came from: entered by hand, or detected in an email (v2). */
+export const STEP_SOURCES = ["manual", "gmail"] as const;
+export type StepSource = (typeof STEP_SOURCES)[number];
 
 export const FILE_KINDS = ["resume", "attachment"] as const;
 export type FileKind = (typeof FILE_KINDS)[number];
+
+/** A step either happened, is planned (upcoming), or was cancelled. */
+export const STEP_STATES = ["done", "planned", "cancelled"] as const;
+export type StepState = (typeof STEP_STATES)[number];

@@ -4,9 +4,16 @@ import { extractOffer } from "@/server/extraction";
 import type { ExtractionResult } from "@/server/extraction/types";
 import * as applications from "@/server/services/application-service";
 import { parseInput } from "@/server/services/errors";
-import type { FileDTO, StatusEventDTO } from "@/server/services/dto";
+import type { FileDTO } from "@/server/services/dto";
 import { extractOfferInput } from "@/lib/validation";
 import { filesFrom, jsonPayload, runAction, type ActionResult } from "./result";
+
+/** Resume and contact choices for the application form. */
+export async function getFormOptionsAction(): Promise<
+  ActionResult<applications.FormOptions>
+> {
+  return runAction(() => applications.getFormOptions(), { mutates: false });
+}
 
 /** Fetch a job posting and return prefilled fields; nothing is saved. */
 export async function extractOfferAction(
@@ -48,11 +55,13 @@ export async function deleteApplicationAction(
   return runAction(() => applications.deleteApplication(id));
 }
 
-export async function addStatusUpdateAction(
+export async function setApplicationContactAction(
   applicationId: string,
-  input: unknown,
-): Promise<ActionResult<StatusEventDTO>> {
-  return runAction(() => applications.addStatusUpdate(applicationId, input));
+  contactId: string | null,
+): Promise<ActionResult> {
+  return runAction(() =>
+    applications.setApplicationContact(applicationId, contactId),
+  );
 }
 
 /** FormData fields: any number of `attachments`. */
