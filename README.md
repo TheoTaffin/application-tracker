@@ -105,7 +105,11 @@ but the app.
 ### Backups
 
 `make backup` writes a `pg_dump` and an archive of the stored files to `./backups/`
-(gitignored).
+(gitignored). `make restore DB=backups/db-<ts>.dump FILES=backups/files-<ts>.tar.gz` puts one
+back: it replaces the database and the stored files, applies newer migrations and restarts the
+app if it was running. Backups move between machines (the stack's passwords may differ), e.g.
+to load local data onto the Pi: copy both files to `~/application-tracker/backups/` there and
+run `scripts/restore.sh` with them.
 
 ## Deployment
 
@@ -170,8 +174,8 @@ tailnet policy lets the CI node reach SSH on the Pi and nothing else.
   every stage in order and stops at the first that fails. Without a `[user]` (and a token on
   stdin) it pulls anonymously, which needs the GHCR packages to be public.
 - **Roll back** by re-running the deploy job of an earlier workflow run: its images are still in
-  GHCR. Migrations only go forward, so restore a backup from `~/application-tracker/backups/`
-  if the schema changed.
+  GHCR. Migrations only go forward, so if the schema changed, also restore the backup taken
+  just before (`scripts/restore.sh` with the files from `~/application-tracker/backups/`).
 - **Another server** reachable over SSH: a new environment with its own variables and secrets.
 
 ### Future work

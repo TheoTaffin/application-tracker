@@ -1,6 +1,6 @@
 .DEFAULT_GOAL := help
 .PHONY: help deps deps-py deps-js setup lint lint-commits lint-pr-title format test test-integration \
-	env build up down logs ps tools dev seed db-generate backup
+	env build up down logs ps tools dev seed db-generate backup restore
 
 COMPOSE := docker compose
 COMPOSE_DEV := docker compose -f compose.yaml -f compose.dev.yaml
@@ -91,3 +91,6 @@ db-generate: ## Generate a migration from schema changes (drizzle/)
 
 backup: ## Dump the database and archive stored files into ./backups (stack must be up)
 	./scripts/backup.sh
+
+restore: ## Replace the database and stored files with a backup (DB=backups/db-….dump FILES=backups/files-….tar.gz)
+	./scripts/restore.sh "$(DB)" "$(FILES)"
