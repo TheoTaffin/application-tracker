@@ -1,7 +1,7 @@
 # Production-safe by default: only `web` publishes a port, bound to 127.0.0.1.
 # Debug UIs are opt-in: `make tools` (profile "tools", also loopback-only).
 # Host-side development: `make dev` adds compose.dev.yaml (never loaded implicitly).
-# Images are built locally (`make up`) or pulled from GHCR on a server (scripts/deploy.sh,
+# Images are built locally (`make up`) or pulled from GHCR on a server (scripts/entrypoint.sh,
 # IMAGE_TAG = the commit SHA the CD built).
 name: application-tracker
 
