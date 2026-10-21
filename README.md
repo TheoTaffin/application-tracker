@@ -14,8 +14,9 @@ application form, the resume I sent, my contacts, and every status change until 
 - **Contacts** shared across applications.
 - **Dashboard**: status groups with their detailed breakdown, follow-ups due in the next 48 hours,
   a filterable and sortable table, and a side panel with the selected application's history.
-- **Save-to-tracker bookmarklet**: one click on any job posting opens the tracker with the offer
-  already fetched.
+- **Save-to-tracker bookmarklet**: one click on any job posting opens the tracker in a new tab
+  with the offer already fetched. Clicked on an application form before submitting, it also
+  brings the answers typed so far and the salary asked for (read in the browser, never fetched).
 - **Offer extraction**: paste a URL and the fields are prefilled. Supports jobs.ch, jobup.ch,
   LinkedIn and any site publishing a schema.org `JobPosting`, with a readable-text fallback.
   A plain-text snapshot is kept because postings disappear.

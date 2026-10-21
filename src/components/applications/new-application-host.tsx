@@ -2,16 +2,24 @@
 
 import { Loader2 } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { FormError } from "@/components/ui/field";
 import { Dialog } from "@/components/ui/dialog";
 import { getFormOptionsAction } from "@/server/actions/applications";
 import type { FormOptions } from "@/server/services/application-service";
-import { ApplicationForm } from "./application-form";
+import {
+  answersToMarkdown,
+  type CapturedAnswer,
+  parseCapturedAnswers,
+  salaryAskFrom,
+} from "@/lib/form-capture";
+import { ApplicationForm, emptyValues } from "./application-form";
 
 /**
  * Global "new application" dialog, driven by the URL so any page (and the bookmarklet)
  * can open it: `?new` opens it empty, `?new=<offer url>` prefills and fetches the offer.
+ * The bookmarklet also passes the answers typed in the posting's application form, in the
+ * URL fragment (`#answers=`).
  */
 export function NewApplicationHost() {
   const searchParams = useSearchParams();
@@ -21,13 +29,27 @@ export function NewApplicationHost() {
   const offerUrl = searchParams.get("new") || undefined;
   const [options, setOptions] = useState<FormOptions | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // Read from the fragment once per opening (a ref survives Strict Mode's double effect).
+  const captured = useRef<CapturedAnswer[] | null>(null);
+  const [answers, setAnswers] = useState<CapturedAnswer[] | null>(null);
 
   useEffect(() => {
     if (!open) return;
     let cancelled = false;
+    if (!captured.current) {
+      captured.current = parseCapturedAnswers(window.location.hash);
+      // The answers stay out of the address bar and the browser history.
+      if (window.location.hash)
+        window.history.replaceState(
+          null,
+          "",
+          window.location.pathname + window.location.search,
+        );
+    }
     getFormOptionsAction()
       .then((result) => {
         if (cancelled) return;
+        setAnswers(captured.current);
         if (result.ok) setOptions(result.data);
         else setError(result.error);
       })
@@ -44,6 +66,8 @@ export function NewApplicationHost() {
 
   // URL changes go through the History API: closing never reloads the page.
   const close = (change?: (params: URLSearchParams) => void) => {
+    captured.current = null;
+    setAnswers(null);
     const params = new URLSearchParams(searchParams);
     params.delete("new");
     change?.(params);
@@ -83,6 +107,16 @@ export function NewApplicationHost() {
             mode="create"
             options={options}
             autoExtractUrl={offerUrl}
+            initialValues={
+              answers
+                ? {
+                    ...emptyValues(),
+                    offerUrl: offerUrl ?? "",
+                    formAnswers: answersToMarkdown(answers),
+                    salaryAsk: String(salaryAskFrom(answers) ?? ""),
+                  }
+                : undefined
+            }
             onCancel={() => close()}
             onDone={created}
           />

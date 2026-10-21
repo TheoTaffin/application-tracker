@@ -3,15 +3,27 @@
 import { Bookmark } from "lucide-react";
 import { useEffect, useRef } from "react";
 import { buttonClass } from "@/components/ui/button";
+import { captureAnswers } from "@/lib/form-capture";
 
 /**
  * The bookmarklet's code: opens this app's new-application dialog for the current page in
  * a new tab, so the posting stays open next to the form. Falls back to the same tab if the
  * browser blocks the new one. Returns nothing, or the browser would show the result as a page.
+ *
+ * Answers already typed in the page's application form go along in the URL fragment,
+ * which browsers never send to a server. A page where reading them fails still opens.
  */
 export function bookmarkletCode(origin: string) {
   const prefix = JSON.stringify(`${origin}/?new=`);
-  return `(()=>{const u=${prefix}+encodeURIComponent(location.href);if(!window.open(u,"_blank"))location.href=u})()`;
+  return `(()=>{let a=[];try{a=(${captureAnswers.toString()})(document)}catch{}const u=${prefix}+encodeURIComponent(location.href)+(a.length?"#answers="+encodeURIComponent(JSON.stringify(a)):"");if(!window.open(u,"_blank"))location.href=u})()`;
+}
+
+/**
+ * The bookmark's URL. Encoded, because browsers strip line breaks from URLs and decode
+ * `%` sequences before running a `javascript:` URL.
+ */
+export function bookmarkletHref(origin: string) {
+  return `javascript:${encodeURIComponent(bookmarkletCode(origin))}`;
 }
 
 /**
@@ -21,8 +33,7 @@ export function bookmarkletCode(origin: string) {
 export function BookmarkletLink() {
   const ref = useRef<HTMLAnchorElement>(null);
   useEffect(() => {
-    const code = bookmarkletCode(window.location.origin);
-    ref.current?.setAttribute("href", `javascript:${code}`);
+    ref.current?.setAttribute("href", bookmarkletHref(window.location.origin));
   }, []);
   return (
     <a
