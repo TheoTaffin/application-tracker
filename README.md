@@ -144,8 +144,10 @@ tailnet policy lets the CI node reach SSH on the Pi and nothing else.
   ]
   ```
 - Trust credentials → OpenID Connect (GitHub), subject
-  `repo:TheoTaffin/application-tracker:environment:raspberry-pi`, writable `auth_keys` scope,
-  tag `tag:ci`. No Tailscale secret is stored in GitHub.
+  `repo:TheoTaffin@46529237/application-tracker@1421061444:environment:raspberry-pi` (GitHub
+  puts the owner and repository IDs in the subject, so a renamed or re-created repository
+  doesn't match), writable `auth_keys` scope, tag `tag:ci`. No Tailscale secret is stored in
+  GitHub.
 
 **GitHub** (Settings → Environments → `raspberry-pi`, deployment branches: `main` only):
 
