@@ -224,7 +224,7 @@ export function EditStepButton({
   );
 }
 
-function Marker({ step, current }: { step: StepDTO; current: boolean }) {
+function Marker({ step }: { step: StepDTO }) {
   const base =
     "absolute top-0.5 -left-6 flex size-4 items-center justify-center rounded-full ring-4 ring-paper";
   if (step.state === "planned")
@@ -236,22 +236,17 @@ function Marker({ step, current }: { step: StepDTO; current: boolean }) {
       </span>
     );
   return (
-    <span
-      className={cx(
-        base,
-        current
-          ? "bg-forest-600 text-white ring-forest-200"
-          : "bg-forest-600 text-white",
-      )}
-    >
+    <span className={cx(base, "bg-forest-600 text-white")}>
       <Check className="size-2.5" strokeWidth={3} />
     </span>
   );
 }
 
 /**
- * The application's timeline: steps that happened, the current one highlighted, then
- * planned ones. Click a step to edit it.
+ * The application's timeline, in date order, with the next planned step highlighted.
+ * The status is shown with the application, not here: an action done after the
+ * latest status change would make any "current" marker look misplaced.
+ * Click a step to edit it.
  */
 export function StepTimeline({
   applicationId,
@@ -264,7 +259,6 @@ export function StepTimeline({
 }) {
   const [editing, setEditing] = useState<StepDTO | null>(null);
   const ordered = sortSteps(steps);
-  const current = currentStep(ordered);
   const upcoming = nextStep(ordered);
   const done = ordered.filter((s) => s.state === "done").length;
   const planned = ordered.filter((s) => s.state === "planned").length;
@@ -279,7 +273,7 @@ export function StepTimeline({
           </span>
           <AddStepButton
             applicationId={applicationId}
-            defaultKind={current?.kind}
+            defaultKind={currentStep(ordered)?.kind}
             variant="ghost"
             className="h-7 px-2"
             label={compact ? "" : "Add step"}
@@ -289,19 +283,16 @@ export function StepTimeline({
 
       <ol className="relative space-y-3 pl-6 before:absolute before:top-2 before:bottom-2 before:left-[7px] before:w-0.5 before:bg-forest-200">
         {ordered.map((step) => {
-          const isCurrent = step.id === current?.id;
           const isNext = step.id === upcoming?.id;
           return (
             <li
               key={step.id}
               className={cx(
                 "relative",
-                isCurrent &&
-                  "rounded-md border border-forest-200 bg-white p-2.5 shadow-sm",
                 step.state === "cancelled" && "opacity-60",
               )}
             >
-              <Marker step={step} current={isCurrent} />
+              <Marker step={step} />
               <button
                 type="button"
                 onClick={() => setEditing(step)}
@@ -315,7 +306,6 @@ export function StepTimeline({
                       <span
                         className={cx(
                           "text-xs font-medium",
-                          isCurrent && "font-semibold text-forest-900",
                           step.state === "cancelled" && "line-through",
                         )}
                       >
@@ -326,11 +316,6 @@ export function StepTimeline({
                   <span className="flex shrink-0 items-center gap-1.5 font-mono text-[10px] text-ink-subtle">
                     {step.source === "gmail" && (
                       <Mail className="size-3" aria-label="From email" />
-                    )}
-                    {isCurrent && (
-                      <span className="rounded border border-forest-200 bg-forest-100 px-1.5 text-forest-700">
-                        Current
-                      </span>
                     )}
                     {isNext && (
                       <span className="rounded border border-ochre-200 bg-ochre-100 px-1.5 text-ochre-800">

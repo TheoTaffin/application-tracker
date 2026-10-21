@@ -9,7 +9,7 @@ import {
   AddStepButton,
   StepTimeline,
 } from "@/components/applications/step-timeline";
-import { GroupBadge } from "@/components/ui/badge";
+import { GroupBadge, StatusBadge } from "@/components/ui/badge";
 import { ButtonLink } from "@/components/ui/button";
 import { cx } from "@/lib/cx";
 import { formatChf, formatWorkload, relativeDay } from "@/lib/format";
@@ -69,7 +69,10 @@ export function SidePanel({
               </p>
             )}
           </div>
-          <GroupBadge group={a.statusGroup} />
+          <div className="flex shrink-0 flex-col items-end gap-1">
+            <StatusBadge status={a.status} />
+            <GroupBadge group={a.statusGroup} />
+          </div>
         </div>
         <div
           role="tablist"
