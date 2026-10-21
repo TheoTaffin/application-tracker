@@ -107,6 +107,77 @@ but the app.
 `make backup` writes a `pg_dump` and an archive of the stored files to `./backups/`
 (gitignored).
 
+## Deployment
+
+Every push to `main` deploys to a Raspberry Pi at home, once CI has passed on it
+(`.github/workflows/cd.yml`):
+
+1. **publish** builds the `runner` and `init` images on a native arm64 runner and pushes them to
+   GHCR, tagged with the commit SHA (and `latest`).
+2. **deploy** joins the tailnet as a temporary `tag:ci` node, uploads `compose.yaml` and the
+   scripts over SSH, then runs [`scripts/entrypoint.sh`](scripts/entrypoint.sh) one stage per step:
+   pull → backup → migrate → up → health check → prune (service logs on failure). Images are
+   pulled with the job's own token, which expires with the job.
+
+The Pi is never reachable from the internet: Tailscale only makes outbound connections, and the
+tailnet policy lets the CI node reach SSH on the Pi and nothing else.
+
+### One-time setup
+
+**Raspberry Pi** (64-bit Raspberry Pi OS, `uname -m` prints `aarch64`):
+
+1. Install Docker with the Compose plugin, and Tailscale: `sudo tailscale up --advertise-tags=tag:pi`.
+2. Create a `deploy` user in the `docker` group (root-equivalent, so the key below is used by
+   the CD only) and add the CD's public key to its `~/.ssh/authorized_keys`.
+3. Write `~deploy/application-tracker/.env` from `.env.example` with fresh secrets
+   (`openssl rand -hex 24`); the host-side development variables are not needed.
+4. A Pi 3 has 1 GB of RAM: give it about 1 GB of swap.
+
+**Tailscale** (admin console):
+
+- Access controls: own both tags and limit the CI node to SSH on the Pi.
+  ```json
+  "tagOwners": { "tag:ci": ["autogroup:admin"], "tag:pi": ["autogroup:admin"] },
+  "grants": [
+    { "src": ["autogroup:member"], "dst": ["*"], "ip": ["*"] },
+    { "src": ["tag:ci"], "dst": ["tag:pi"], "ip": ["tcp:22"] }
+  ]
+  ```
+- Trust credentials → OpenID Connect (GitHub), subject
+  `repo:TheoTaffin/application-tracker:environment:raspberry-pi`, writable `auth_keys` scope,
+  tag `tag:ci`. No Tailscale secret is stored in GitHub.
+
+**GitHub** (Settings → Environments → `raspberry-pi`, deployment branches: `main` only):
+
+| Name                 | Kind     | Value                                                  |
+| -------------------- | -------- | ------------------------------------------------------ |
+| `DEPLOY_HOST`        | variable | the Pi's MagicDNS name                                 |
+| `DEPLOY_USER`        | variable | `deploy`                                               |
+| `TS_OAUTH_CLIENT_ID` | variable | client ID of the trust credential                      |
+| `TS_AUDIENCE`        | variable | audience of the trust credential                       |
+| `DEPLOY_SSH_KEY`     | secret   | private key of a key pair made for the CD only         |
+| `DEPLOY_KNOWN_HOSTS` | secret   | `ssh-keyscan <DEPLOY_HOST>`, run from a tailnet device |
+
+### Operating
+
+- **Open the app** from your own devices: `sudo tailscale serve --bg 3000` on the Pi serves it
+  over HTTPS on the tailnet only. Never use Funnel: the app has no authentication yet.
+- **Status and logs** on the Pi: `~/application-tracker/scripts/entrypoint.sh compose ps` (or `logs`,
+  any `docker compose` command, on the deployed images).
+- **Deploy by hand** on the Pi: `~/application-tracker/scripts/entrypoint.sh deploy <sha>` runs
+  every stage in order and stops at the first that fails. Without a `[user]` (and a token on
+  stdin) it pulls anonymously, which needs the GHCR packages to be public.
+- **Roll back** by re-running the deploy job of an earlier workflow run: its images are still in
+  GHCR. Migrations only go forward, so restore a backup from `~/application-tracker/backups/`
+  if the schema changed.
+- **Another server** reachable over SSH: a new environment with its own variables and secrets.
+
+### Future work
+
+- Deploy on releases instead of every merge (e.g. release-please from the Conventional Commits).
+- Copy backups off the Pi: they live on the same SD card as the data.
+- Authentication, before the app is reachable by anyone but me.
+
 ## Contributing
 
 Work happens on branches through pull requests: `main` is protected and requires the `lint` and
