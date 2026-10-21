@@ -1,0 +1,132 @@
+name: CD
+
+# Runs once CI has finished, from this file on the default branch. Deploys the commit CI
+# tested (head_sha), not the latest one on main.
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+
+permissions:
+  contents: read
+
+# One deploy at a time: a newer one waits for the running one (and replaces any still queued).
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
+env:
+  SHA: ${{ github.event.workflow_run.head_sha }}
+
+jobs:
+  # Native arm64 runner: the images run on a Raspberry Pi (no slow QEMU emulation).
+  publish:
+    # CI passed on a push to main of this repository: a pull request from a fork's own
+    # `main` branch also matches the `branches` filter, so the event is checked too.
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push' &&
+      github.event.workflow_run.head_repository.full_name == github.repository
+    runs-on: ubuntu-24.04-arm
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      matrix:
+        include:
+          - target: runner
+            image: ghcr.io/theotaffin/application-tracker
+          - target: init
+            image: ghcr.io/theotaffin/application-tracker-init
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ env.SHA }}
+      - uses: docker/setup-buildx-action@v4
+      - uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/build-push-action@v7
+        with:
+          context: .
+          target: ${{ matrix.target }}
+          platforms: linux/arm64
+          push: true
+          tags: |
+            ${{ matrix.image }}:${{ env.SHA }}
+            ${{ matrix.image }}:latest
+          # Links the package to this repository (and its GITHUB_TOKEN access).
+          labels: org.opencontainers.image.source=https://github.com/${{ github.repository }}
+          cache-from: type=gha,scope=${{ matrix.target }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.target }}
+
+  # Joins the tailnet as a temporary tag:ci node and runs scripts/deploy.sh over SSH,
+  # one step per stage. Setup: README > Deployment.
+  deploy:
+    needs: publish
+    runs-on: ubuntu-latest
+    environment: raspberry-pi
+    permissions:
+      contents: read
+      packages: read # pull on the server, with this job's short-lived token
+      id-token: write # Tailscale workload identity federation (no stored Tailscale secret)
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ env.SHA }}
+
+      - uses: tailscale/github-action@v4
+        with:
+          oauth-client-id: ${{ vars.TS_OAUTH_CLIENT_ID }}
+          audience: ${{ vars.TS_AUDIENCE }}
+          tags: tag:ci
+          ping: ${{ vars.DEPLOY_HOST }}
+
+      - name: Configure SSH
+        env:
+          SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+          HOST: ${{ vars.DEPLOY_HOST }}
+          USER: ${{ vars.DEPLOY_USER }}
+        run: |
+          install -d -m 700 ~/.ssh
+          install -m 600 /dev/null ~/.ssh/deploy_key
+          printf '%s\n' "$SSH_KEY" > ~/.ssh/deploy_key
+          printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
+          printf 'Host target\n  HostName %s\n  User %s\n  IdentityFile ~/.ssh/deploy_key\n  IdentitiesOnly yes\n' \
+            "$HOST" "$USER" > ~/.ssh/config
+
+      - name: Upload compose file and scripts
+        run: |
+          tar czf - compose.yaml scripts/deploy.sh scripts/backup.sh \
+            | ssh target 'mkdir -p application-tracker && tar xzf - -C application-tracker'
+
+      - name: Pull images
+        env:
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # The SHA and actor expand here on purpose: they are the script's arguments.
+          # shellcheck disable=SC2029
+          printf '%s' "$TOKEN" \
+            | ssh target application-tracker/scripts/deploy.sh pull "$SHA" "$GITHUB_ACTOR"
+
+      - name: Back up
+        run: ssh target application-tracker/scripts/deploy.sh backup
+
+      - name: Migrate
+        run: ssh target application-tracker/scripts/deploy.sh migrate
+
+      - name: Start
+        run: ssh target application-tracker/scripts/deploy.sh up
+
+      - name: Health check
+        run: ssh target application-tracker/scripts/deploy.sh health
+
+      - name: Remove old images
+        run: ssh target application-tracker/scripts/deploy.sh prune
+
+      - if: failure()
+        run: ssh target application-tracker/scripts/deploy.sh logs
