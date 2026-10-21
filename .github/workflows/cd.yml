@@ -101,7 +101,7 @@ jobs:
 
       - name: Upload compose file and scripts
         run: |
-          tar czf - compose.yaml scripts/entrypoint.sh scripts/backup.sh \
+          tar czf - compose.yaml scripts/entrypoint.sh scripts/backup.sh scripts/restore.sh \
             | ssh target 'mkdir -p application-tracker && tar xzf - -C application-tracker'
 
       - name: Pull images
