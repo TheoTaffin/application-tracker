@@ -115,7 +115,7 @@ Every push to `main` deploys to a Raspberry Pi at home, once CI has passed on it
 1. **publish** builds the `runner` and `init` images on a native arm64 runner and pushes them to
    GHCR, tagged with the commit SHA (and `latest`).
 2. **deploy** joins the tailnet as a temporary `tag:ci` node, uploads `compose.yaml` and the
-   scripts over SSH, then runs [`scripts/deploy.sh`](scripts/deploy.sh) one stage per step:
+   scripts over SSH, then runs [`scripts/entrypoint.sh`](scripts/entrypoint.sh) one stage per step:
    pull → backup → migrate → up → health check → prune (service logs on failure). Images are
    pulled with the job's own token, which expires with the job.
 
@@ -162,8 +162,11 @@ tailnet policy lets the CI node reach SSH on the Pi and nothing else.
 
 - **Open the app** from your own devices: `sudo tailscale serve --bg 3000` on the Pi serves it
   over HTTPS on the tailnet only. Never use Funnel: the app has no authentication yet.
-- **Status and logs** on the Pi: `~/application-tracker/scripts/deploy.sh compose ps` (or `logs`,
+- **Status and logs** on the Pi: `~/application-tracker/scripts/entrypoint.sh compose ps` (or `logs`,
   any `docker compose` command, on the deployed images).
+- **Deploy by hand** on the Pi: `~/application-tracker/scripts/entrypoint.sh deploy <sha>` runs
+  every stage in order and stops at the first that fails. Without a `[user]` (and a token on
+  stdin) it pulls anonymously, which needs the GHCR packages to be public.
 - **Roll back** by re-running the deploy job of an earlier workflow run: its images are still in
   GHCR. Migrations only go forward, so restore a backup from `~/application-tracker/backups/`
   if the schema changed.

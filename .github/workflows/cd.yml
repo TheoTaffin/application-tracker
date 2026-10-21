@@ -63,7 +63,7 @@ jobs:
           cache-from: type=gha,scope=${{ matrix.target }}
           cache-to: type=gha,mode=max,scope=${{ matrix.target }}
 
-  # Joins the tailnet as a temporary tag:ci node and runs scripts/deploy.sh over SSH,
+  # Joins the tailnet as a temporary tag:ci node and runs scripts/entrypoint.sh over SSH,
   # one step per stage. Setup: README > Deployment.
   deploy:
     needs: publish
@@ -101,7 +101,7 @@ jobs:
 
       - name: Upload compose file and scripts
         run: |
-          tar czf - compose.yaml scripts/deploy.sh scripts/backup.sh \
+          tar czf - compose.yaml scripts/entrypoint.sh scripts/backup.sh \
             | ssh target 'mkdir -p application-tracker && tar xzf - -C application-tracker'
 
       - name: Pull images
@@ -111,22 +111,22 @@ jobs:
           # The SHA and actor expand here on purpose: they are the script's arguments.
           # shellcheck disable=SC2029
           printf '%s' "$TOKEN" \
-            | ssh target application-tracker/scripts/deploy.sh pull "$SHA" "$GITHUB_ACTOR"
+            | ssh target application-tracker/scripts/entrypoint.sh pull "$SHA" "$GITHUB_ACTOR"
 
       - name: Back up
-        run: ssh target application-tracker/scripts/deploy.sh backup
+        run: ssh target application-tracker/scripts/entrypoint.sh backup
 
       - name: Migrate
-        run: ssh target application-tracker/scripts/deploy.sh migrate
+        run: ssh target application-tracker/scripts/entrypoint.sh migrate
 
       - name: Start
-        run: ssh target application-tracker/scripts/deploy.sh up
+        run: ssh target application-tracker/scripts/entrypoint.sh up
 
       - name: Health check
-        run: ssh target application-tracker/scripts/deploy.sh health
+        run: ssh target application-tracker/scripts/entrypoint.sh health
 
       - name: Remove old images
-        run: ssh target application-tracker/scripts/deploy.sh prune
+        run: ssh target application-tracker/scripts/entrypoint.sh prune
 
       - if: failure()
-        run: ssh target application-tracker/scripts/deploy.sh logs
+        run: ssh target application-tracker/scripts/entrypoint.sh logs

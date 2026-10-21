@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Dumps the database and archives the stored files into ./backups (the stack must be up).
-# Used by `make backup` locally and by scripts/deploy.sh on the server.
+# Used by `make backup` locally and by scripts/entrypoint.sh on the server.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
