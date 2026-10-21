@@ -25,11 +25,18 @@ export function NewApplicationHost() {
   useEffect(() => {
     if (!open) return;
     let cancelled = false;
-    getFormOptionsAction().then((result) => {
-      if (cancelled) return;
-      if (result.ok) setOptions(result.data);
-      else setError(result.error);
-    });
+    getFormOptionsAction()
+      .then((result) => {
+        if (cancelled) return;
+        if (result.ok) setOptions(result.data);
+        else setError(result.error);
+      })
+      // Thrown rather than returned: the server is unreachable, or this page predates a
+      // deploy and the server no longer knows the action. Without this, it loads forever.
+      .catch(() => {
+        if (!cancelled)
+          setError("Could not load the form. Reload the page and try again.");
+      });
     return () => {
       cancelled = true;
     };
