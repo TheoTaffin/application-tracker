@@ -17,7 +17,7 @@ export default function BookmarkletPage() {
           <p className="text-[13px] leading-relaxed text-ink-muted">
             Drag this button to your bookmarks bar. On a job posting (jobs.ch,
             jobup.ch, LinkedIn, a company careers page), click it: the tracker
-            opens with the offer details already fetched.
+            opens in a new tab with the offer details already fetched.
           </p>
           <BookmarkletLink />
           <p className="text-[11px] text-ink-subtle">
