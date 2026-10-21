@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { APPLICATION_SOURCES, POSTING_LANGUAGES, STEP_STATES } from "./enums";
+import { todayInAppTimeZone } from "./dates";
 import { setsStatus, STEP_KINDS } from "./steps";
 
 /**
@@ -114,7 +115,15 @@ export const stepInput = z
   .refine((s) => s.state !== "done" || s.date !== null, {
     message: "When did it happen?",
     path: ["date"],
-  });
+  })
+  .refine(
+    (s) =>
+      s.state !== "done" || s.date === null || s.date <= todayInAppTimeZone(),
+    {
+      message: "A done step can't be in the future: plan it instead",
+      path: ["date"],
+    },
+  );
 export type StepInput = z.infer<typeof stepInput>;
 
 export const newApplicationInput = z.object({

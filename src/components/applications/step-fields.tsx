@@ -110,7 +110,15 @@ export function StepFields({
             {...p}
             type="date"
             value={values.date}
-            onChange={(e) => set("date", e.target.value)}
+            onChange={(e) => {
+              const date = e.target.value;
+              // A future date can only be planned: done steps happened.
+              const state =
+                values.state === "done" && date > todayInAppTimeZone()
+                  ? "planned"
+                  : values.state;
+              onChange({ ...values, date, state });
+            }}
           />
         )}
       </Field>

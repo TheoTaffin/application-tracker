@@ -7,7 +7,7 @@ import {
   NotFoundError,
 } from "@/server/services/errors";
 import * as progress from "@/server/services/progress-service";
-import { todayInAppTimeZone } from "@/lib/dates";
+import { addDays, todayInAppTimeZone } from "@/lib/dates";
 import { newApplication, pdfFile, pngFile } from "./helpers";
 
 async function create(company = "Example Bank AG") {
@@ -137,6 +137,13 @@ describe("steps", () => {
     );
     await expect(
       progress.addStep(id, { kind: "screening", state: "done" }),
+    ).rejects.toBeInstanceOf(InvalidInputError);
+    await expect(
+      progress.addStep(id, {
+        kind: "reach_out",
+        state: "done",
+        date: addDays(todayInAppTimeZone(), 2),
+      }),
     ).rejects.toBeInstanceOf(InvalidInputError);
     await expect(
       progress.updateStep("00000000-0000-4000-8000-000000000000", {
