@@ -14,8 +14,9 @@ application form, the resume I sent, my contacts, and every status change until 
 - **Contacts** shared across applications.
 - **Dashboard**: status groups with their detailed breakdown, follow-ups due in the next 48 hours,
   a filterable and sortable table, and a side panel with the selected application's history.
-- **Save-to-tracker bookmarklet**: one click on any job posting opens the tracker with the offer
-  already fetched.
+- **Save-to-tracker bookmarklet**: one click on any job posting opens the tracker in a new tab
+  with the offer already fetched. Clicked on an application form before submitting, it also
+  brings the answers typed so far and the salary asked for (read in the browser, never fetched).
 - **Offer extraction**: paste a URL and the fields are prefilled. Supports jobs.ch, jobup.ch,
   LinkedIn and any site publishing a schema.org `JobPosting`, with a readable-text fallback.
   A plain-text snapshot is kept because postings disappear.
@@ -105,7 +106,11 @@ but the app.
 ### Backups
 
 `make backup` writes a `pg_dump` and an archive of the stored files to `./backups/`
-(gitignored).
+(gitignored). `make restore DB=backups/db-<ts>.dump FILES=backups/files-<ts>.tar.gz` puts one
+back: it replaces the database and the stored files, applies newer migrations and restarts the
+app if it was running. Backups move between machines (the stack's passwords may differ), e.g.
+to load local data onto the Pi: copy both files to `~/application-tracker/backups/` there and
+run `scripts/restore.sh` with them.
 
 ## Deployment
 
@@ -144,8 +149,10 @@ tailnet policy lets the CI node reach SSH on the Pi and nothing else.
   ]
   ```
 - Trust credentials → OpenID Connect (GitHub), subject
-  `repo:TheoTaffin/application-tracker:environment:raspberry-pi`, writable `auth_keys` scope,
-  tag `tag:ci`. No Tailscale secret is stored in GitHub.
+  `repo:TheoTaffin@46529237/application-tracker@1421061444:environment:raspberry-pi` (GitHub
+  puts the owner and repository IDs in the subject, so a renamed or re-created repository
+  doesn't match), writable `auth_keys` scope, tag `tag:ci`. No Tailscale secret is stored in
+  GitHub.
 
 **GitHub** (Settings → Environments → `raspberry-pi`, deployment branches: `main` only):
 
@@ -168,8 +175,8 @@ tailnet policy lets the CI node reach SSH on the Pi and nothing else.
   every stage in order and stops at the first that fails. Without a `[user]` (and a token on
   stdin) it pulls anonymously, which needs the GHCR packages to be public.
 - **Roll back** by re-running the deploy job of an earlier workflow run: its images are still in
-  GHCR. Migrations only go forward, so restore a backup from `~/application-tracker/backups/`
-  if the schema changed.
+  GHCR. Migrations only go forward, so if the schema changed, also restore the backup taken
+  just before (`scripts/restore.sh` with the files from `~/application-tracker/backups/`).
 - **Another server** reachable over SSH: a new environment with its own variables and secrets.
 
 ### Future work

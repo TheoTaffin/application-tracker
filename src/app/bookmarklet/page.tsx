@@ -17,12 +17,17 @@ export default function BookmarkletPage() {
           <p className="text-[13px] leading-relaxed text-ink-muted">
             Drag this button to your bookmarks bar. On a job posting (jobs.ch,
             jobup.ch, LinkedIn, a company careers page), click it: the tracker
-            opens with the offer details already fetched.
+            opens in a new tab with the offer details already fetched.
+          </p>
+          <p className="text-[13px] leading-relaxed text-ink-muted">
+            Applying through the posting&apos;s form? Fill it in, then click the
+            button before submitting: your answers and the salary you asked for
+            come along. Your name, email, phone number and files are left out.
           </p>
           <BookmarkletLink />
           <p className="text-[11px] text-ink-subtle">
-            The bookmark only opens this app with the page address. Nothing is
-            sent anywhere else.
+            The bookmark only opens this app with the page address and your
+            answers. Nothing is sent anywhere else.
           </p>
         </Card>
       </main>
