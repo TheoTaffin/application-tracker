@@ -1,10 +1,25 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   assertSafeUrl,
   isPublicAddress,
   safeFetch,
   UnsafeUrlError,
 } from "@/server/extraction/safe-fetch";
+
+// No real DNS in unit tests: every name resolves to loopback, as a DNS rebinding attack
+// would make a public-looking name do.
+vi.mock("node:dns", async (importOriginal) => {
+  const dns = await importOriginal<typeof import("node:dns")>();
+  const lookup = (
+    _hostname: string,
+    _options: unknown,
+    callback: (
+      err: null,
+      addresses: { address: string; family: number }[],
+    ) => void,
+  ) => callback(null, [{ address: "127.0.0.1", family: 4 }]);
+  return { ...dns, default: { ...dns, lookup }, lookup };
+});
 
 describe("isPublicAddress", () => {
   it.each([
@@ -56,7 +71,7 @@ describe("assertSafeUrl", () => {
 
 describe("safeFetch", () => {
   it("refuses hostnames that resolve to loopback (checked at connect time)", async () => {
-    await expect(safeFetch("http://localhost/")).rejects.toBeInstanceOf(
+    await expect(safeFetch("http://jobs.example/")).rejects.toBeInstanceOf(
       UnsafeUrlError,
     );
   });
